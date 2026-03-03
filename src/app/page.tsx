@@ -113,8 +113,12 @@ export default function Home() {
   }
 
   const canAnalyze = savedFiles.length > 0 && !extracting;
-  const canRunAi =
-    extractResults !== null && extractResults.length > 0 && !analyzeLoading;
+  const hasUsableExtracts =
+    extractResults !== null &&
+    extractResults.some(
+      (r) => r.text && !r.text.startsWith("OCR not supported")
+    );
+  const canRunAi = hasUsableExtracts && !analyzeLoading;
 
   return (
     <main className="bg-gray-50 min-h-screen">

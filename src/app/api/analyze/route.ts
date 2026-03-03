@@ -101,6 +101,10 @@ export async function POST(req: NextRequest) {
   const documentParts: string[] = [];
   const errors: { filename: string; error: string }[] = [];
 
+  if (!body.files.every((f: unknown) => typeof f === 'string' && f.length > 0)) {
+    return NextResponse.json({ error: 'each file must be a non-empty string' }, { status: 400 });
+  }
+
   for (const filename of body.files) {
     // Security: prevent path traversal
     const safe = path.basename(filename);
@@ -129,7 +133,7 @@ export async function POST(req: NextRequest) {
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
+    max_tokens: 4096,
     system: SYSTEM_PROMPT,
     messages: [
       {
@@ -159,7 +163,11 @@ export async function POST(req: NextRequest) {
   // Save analysis result
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const outputPath = path.join(UPLOADS_DIR, `analysis-${timestamp}.json`);
-  await fs.writeFile(outputPath, JSON.stringify(analysis, null, 2), 'utf-8');
+  try {
+    await fs.writeFile(outputPath, JSON.stringify(analysis, null, 2), 'utf-8');
+  } catch {
+    return NextResponse.json({ analysis, errors, saveError: 'Failed to persist result' });
+  }
 
   return NextResponse.json({ analysis, errors, savedAs: `analysis-${timestamp}.json` });
 }
