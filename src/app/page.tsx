@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import UploadZone from "./components/UploadZone";
+import ApiKeyInput from "./components/ApiKeyInput";
 import ResultsDashboard from "./components/ResultsDashboard";
 import type { PriceComparison } from "./components/ResultsDashboard";
 import type { CalculatedMetrics } from "@/lib/calculator";
@@ -61,6 +62,7 @@ function formatEur(value: number | null): string {
 }
 
 export default function Home() {
+  const [apiKey, setApiKey] = useState("");
   const [savedFiles, setSavedFiles] = useState<string[]>([]);
   const [extracting, setExtracting] = useState(false);
   const [extractResults, setExtractResults] = useState<ExtractResult[] | null>(
@@ -108,7 +110,7 @@ export default function Home() {
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
         body: JSON.stringify({ files: savedFiles }),
       });
       const data = await res.json();
@@ -146,7 +148,7 @@ export default function Home() {
     try {
       const res = await fetch("/api/summary", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
         body: JSON.stringify({ analysis, metrics }),
       });
       const data = await res.json();
@@ -187,6 +189,7 @@ export default function Home() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm p-8">
+          <ApiKeyInput value={apiKey} onChange={setApiKey} />
           <UploadZone onUploadedChange={setSavedFiles} />
 
           <button

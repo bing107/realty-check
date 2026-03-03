@@ -92,9 +92,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'files array required' }, { status: 400 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = req.headers.get('x-api-key') || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'API key required. Provide your Anthropic key via the X-API-Key header.' },
+      { status: 401 }
+    );
   }
 
   // Read extracted text files
