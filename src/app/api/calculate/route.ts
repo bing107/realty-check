@@ -11,6 +11,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (
+    typeof body.analysis !== 'object' ||
+    !body.analysis.financials ||
+    !body.analysis.property ||
+    !body.analysis.protocols ||
+    !body.analysis.wirtschaftsplan
+  ) {
+    return NextResponse.json({ error: 'analysis is malformed' }, { status: 400 });
+  }
+
   const analysis: AnalysisResult = body.analysis;
   const assumptions: Partial<MortgageAssumptions> | undefined = body.assumptions;
 

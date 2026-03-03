@@ -253,8 +253,9 @@ describe('computeMetrics', () => {
     // totalAcqCost = 278000
     expect(metrics.totalAcquisitionCost).toBe(278000);
 
-    // netRentalYield: (10800 - 4200 - 600) / 278000 * 100 = 2.158...
-    expect(metrics.netRentalYield).toBeCloseTo(2.158, 2);
+    // netRentalYield: (10800 - 4200 - 0) / 278000 * 100 = 2.374...
+    // hausgeld is inclusive of ruecklage per WEG convention, so nonRecoverableCosts = 0
+    expect(metrics.netRentalYield).toBeCloseTo(2.374, 2);
 
     // Loan = 250000 * 0.80 = 200000, 3.5%, 25 years => ~1001.25
     expect(metrics.monthlyMortgagePayment).toBeCloseTo(1001.25, 0);

@@ -240,17 +240,19 @@ export function computeMetrics(
   }
 
   // netRentalYield
+  // Hausgeld is the total monthly HOA fee inclusive of Instandhaltungsrücklage
+  // (reserve fund) per standard WEG accounting, so ruecklage is NOT passed
+  // separately as nonRecoverableCosts to avoid double-counting.
   let computedNetYield: number | null = null;
   if (
     monthlyRent != null &&
     financials.hausgeld != null &&
-    financials.ruecklage != null &&
     computedTotalAcqCost != null
   ) {
     computedNetYield = netRentalYield(
       monthlyRent * 12,
       financials.hausgeld * 12,
-      financials.ruecklage * 12,
+      0,
       computedTotalAcqCost,
     );
   }

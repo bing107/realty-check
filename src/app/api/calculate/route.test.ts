@@ -62,6 +62,13 @@ describe('POST /api/calculate', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 when analysis is missing nested objects', async () => {
+    const res = await POST(makeRequest({ analysis: { financials: {} } }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/malformed/i);
+  });
+
   it('returns 200 with valid analysis and computed metrics', async () => {
     const res = await POST(makeRequest({ analysis: validAnalysis }));
     expect(res.status).toBe(200);
