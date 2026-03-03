@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import UploadZone from "./components/UploadZone";
+import ResultsDashboard from "./components/ResultsDashboard";
+import type { PriceComparison } from "./components/ResultsDashboard";
+import type { CalculatedMetrics } from "@/lib/calculator";
 
 interface ExtractResult {
   filename: string;
@@ -49,7 +52,7 @@ interface AnalysisResult {
 }
 
 function formatEur(value: number | null): string {
-  if (value === null) return "—";
+  if (value === null) return "\u2014";
   return new Intl.NumberFormat("de-DE", {
     style: "currency",
     currency: "EUR",
@@ -69,6 +72,15 @@ export default function Home() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+
+  const [metrics, setMetrics] = useState<CalculatedMetrics | null>(null);
+  const [investmentSummary, setInvestmentSummary] = useState<string | null>(
+    null
+  );
+  const [priceComparison, setPriceComparison] =
+    useState<PriceComparison | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   async function handleAnalyze() {
     setExtracting(true);
@@ -105,10 +117,49 @@ export default function Home() {
         return;
       }
       setAnalysis(data.analysis);
+
+      // Auto-call calculate after analysis succeeds
+      try {
+        const calcRes = await fetch("/api/calculate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ analysis: data.analysis }),
+        });
+        const calcData = await calcRes.json();
+        if (calcRes.ok) {
+          setMetrics(calcData.metrics);
+        }
+      } catch {
+        // Calculator failure is non-fatal; user can still see analysis
+      }
     } catch {
       setAnalyzeError("Failed to analyze documents. Please try again.");
     } finally {
       setAnalyzeLoading(false);
+    }
+  }
+
+  async function handleGenerateReport() {
+    if (!analysis || !metrics) return;
+    setSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const res = await fetch("/api/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ analysis, metrics }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSummaryError(data.error || "Summary generation failed");
+        return;
+      }
+      setInvestmentSummary(data.investmentSummary);
+      setPriceComparison(data.priceComparison ?? null);
+    } catch {
+      setSummaryError("Failed to generate report. Please try again.");
+    } finally {
+      setSummaryLoading(false);
     }
   }
 
@@ -120,9 +171,14 @@ export default function Home() {
     );
   const canRunAi = hasUsableExtracts && !analyzeLoading;
 
+  const showDashboard =
+    analysis !== null && metrics !== null && investmentSummary !== null;
+  const canGenerateReport =
+    analysis !== null && metrics !== null && !summaryLoading && !showDashboard;
+
   return (
     <main className="bg-gray-50 min-h-screen">
-      <div className="max-w-2xl mx-auto px-4 py-16">
+      <div className="max-w-5xl mx-auto px-4 py-16">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900">Realty Check</h1>
           <p className="text-lg text-gray-500 mt-2">
@@ -171,7 +227,7 @@ export default function Home() {
           </div>
         )}
 
-        {extractResults !== null && (
+        {extractResults !== null && !showDashboard && (
           <div className="mt-8 space-y-4">
             <h2 className="text-xl font-semibold text-gray-900">
               Extraction Results
@@ -199,7 +255,7 @@ export default function Home() {
           </div>
         )}
 
-        {canRunAi && (
+        {canRunAi && !showDashboard && (
           <div className="mt-8">
             <button
               disabled={analyzeLoading}
@@ -221,7 +277,8 @@ export default function Home() {
           </div>
         )}
 
-        {analysis && (
+        {/* Show raw analysis before dashboard is ready */}
+        {analysis && !showDashboard && (
           <div className="mt-8 space-y-6">
             <h2 className="text-2xl font-bold text-gray-900">
               AI Analysis Results
@@ -260,25 +317,25 @@ export default function Home() {
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <dt className="text-gray-500">Address</dt>
                 <dd className="text-gray-900">
-                  {analysis.property.address ?? "—"}
+                  {analysis.property.address ?? "\u2014"}
                 </dd>
                 <dt className="text-gray-500">Size</dt>
                 <dd className="text-gray-900">
                   {analysis.property.sqm != null
                     ? `${analysis.property.sqm} m\u00B2`
-                    : "—"}
+                    : "\u2014"}
                 </dd>
                 <dt className="text-gray-500">Units</dt>
                 <dd className="text-gray-900">
-                  {analysis.property.units ?? "—"}
+                  {analysis.property.units ?? "\u2014"}
                 </dd>
                 <dt className="text-gray-500">Year Built</dt>
                 <dd className="text-gray-900">
-                  {analysis.property.yearBuilt ?? "—"}
+                  {analysis.property.yearBuilt ?? "\u2014"}
                 </dd>
                 <dt className="text-gray-500">Type</dt>
                 <dd className="text-gray-900">
-                  {analysis.property.type ?? "—"}
+                  {analysis.property.type ?? "\u2014"}
                 </dd>
               </dl>
             </div>
@@ -306,7 +363,10 @@ export default function Home() {
                     ["Notar Fees", analysis.financials.notarFees],
                     ["Makler Fees", analysis.financials.maklerFees],
                   ].map(([label, value]) => (
-                    <tr key={label as string} className="border-b last:border-0">
+                    <tr
+                      key={label as string}
+                      className="border-b last:border-0"
+                    >
                       <td className="py-2 text-gray-500">{label as string}</td>
                       <td className="py-2 text-right text-gray-900 font-medium">
                         {formatEur(value as number | null)}
@@ -398,7 +458,7 @@ export default function Home() {
                   </dd>
                   <dt className="text-gray-500">Reserve Fund Status</dt>
                   <dd className="text-gray-900">
-                    {analysis.wirtschaftsplan.reserveFundStatus ?? "—"}
+                    {analysis.wirtschaftsplan.reserveFundStatus ?? "\u2014"}
                   </dd>
                 </dl>
                 {analysis.wirtschaftsplan.plannedMajorWorks.length > 0 && (
@@ -418,6 +478,41 @@ export default function Home() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Generate Full Report button */}
+        {canGenerateReport && (
+          <div className="mt-8">
+            <button
+              disabled={summaryLoading}
+              onClick={handleGenerateReport}
+              className={`w-full py-3 rounded-xl font-semibold transition-colors ${
+                summaryLoading
+                  ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                  : "bg-indigo-600 hover:bg-indigo-700 text-white"
+              }`}
+            >
+              {summaryLoading
+                ? "Generating Full Report..."
+                : "Generate Full Report"}
+            </button>
+          </div>
+        )}
+
+        {summaryError && (
+          <div className="mt-8 bg-red-50 border border-red-200 rounded-xl p-4">
+            <p className="text-red-700">{summaryError}</p>
+          </div>
+        )}
+
+        {/* Full Results Dashboard */}
+        {showDashboard && (
+          <ResultsDashboard
+            analysis={analysis}
+            metrics={metrics}
+            investmentSummary={investmentSummary}
+            priceComparison={priceComparison}
+          />
         )}
       </div>
     </main>
