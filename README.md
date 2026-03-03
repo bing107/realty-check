@@ -4,6 +4,26 @@ German real estate investment analysis tool. Upload broker PDFs (Exposés), extr
 
 Built with Next.js, TypeScript, and the Anthropic SDK.
 
+## Screenshots
+
+### Upload & Extract
+
+Upload broker PDFs (Exposés, Protokolle, Wirtschaftspläne) and extract text for analysis.
+
+![Upload and extraction](docs/screenshot-upload.png)
+
+### AI Analysis
+
+Claude analyzes extracted documents and returns structured property data, financials, and risk assessment.
+
+![AI analysis results](docs/screenshot-analysis.png)
+
+### Protocol Findings & Wirtschaftsplan
+
+Surfaces renovation plans, Sonderumlagen, maintenance backlog, and budget details from owner meeting protocols.
+
+![Protocol findings and Wirtschaftsplan](docs/screenshot-details.png)
+
 ## Features
 
 - **PDF Upload** — drag-and-drop or click to upload broker PDFs via `react-dropzone`
