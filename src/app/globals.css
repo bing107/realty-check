@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@media print {
+  body { background: white; }
+  .print\:hidden { display: none !important; }
+  nav, button { display: none; }
+  .shadow-sm { box-shadow: none; }
+  @page { margin: 1cm; }
+}
