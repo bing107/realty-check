@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface Props {
   value: string;
@@ -9,17 +9,22 @@ interface Props {
 
 export default function ApiKeyInput({ value, onChange }: Props) {
   const [show, setShow] = useState(false);
+  const initialized = useRef(false);
 
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
     const stored = localStorage.getItem("anthropic_api_key");
-    if (stored && !value) {
-      onChange(stored);
-    }
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+    if (stored && !value) onChange(stored);
+  }, [value, onChange]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const key = e.target.value;
-    localStorage.setItem("anthropic_api_key", key);
+    if (key) {
+      localStorage.setItem("anthropic_api_key", key);
+    } else {
+      localStorage.removeItem("anthropic_api_key");
+    }
     onChange(key);
   }
 
