@@ -28,7 +28,6 @@ import { writeFile, mkdir } from "fs/promises";
  * Node 18 does not expose a global File class.
  * We import it from the built-in node:buffer module.
  */
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { File: NodeFile } = require("node:buffer");
 const FilePolyfill = NodeFile as typeof globalThis.File;
 

@@ -42,9 +42,9 @@ describe("UploadZone", () => {
     expect(fileList).toBeNull();
   });
 
-  it("calls onUploadedChange(false) on initial render", () => {
+  it("calls onUploadedChange with empty array on initial render", () => {
     render(<UploadZone onUploadedChange={noop} />);
-    expect(noop).toHaveBeenCalledWith(false);
+    expect(noop).toHaveBeenCalledWith([]);
   });
 
   it("renders a hidden file input with PDF accept attribute", () => {

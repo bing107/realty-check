@@ -3,8 +3,36 @@
 import { useState } from "react";
 import UploadZone from "./components/UploadZone";
 
+interface ExtractResult {
+  filename: string;
+  pages: number;
+  text: string;
+  extractedAt: string;
+}
+
 export default function Home() {
-  const [hasUploaded, setHasUploaded] = useState(false);
+  const [savedFiles, setSavedFiles] = useState<string[]>([]);
+  const [extracting, setExtracting] = useState(false);
+  const [extractResults, setExtractResults] = useState<ExtractResult[] | null>(
+    null
+  );
+
+  async function handleAnalyze() {
+    setExtracting(true);
+    try {
+      const res = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files: savedFiles }),
+      });
+      const data = await res.json();
+      setExtractResults(data.results);
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  const canAnalyze = savedFiles.length > 0 && !extracting;
 
   return (
     <main className="bg-gray-50 min-h-screen">
@@ -17,19 +45,48 @@ export default function Home() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm p-8">
-          <UploadZone onUploadedChange={setHasUploaded} />
+          <UploadZone onUploadedChange={setSavedFiles} />
 
           <button
-            disabled={!hasUploaded}
+            disabled={!canAnalyze}
+            onClick={handleAnalyze}
             className={`w-full mt-6 py-3 rounded-xl font-semibold transition-colors ${
-              hasUploaded
+              canAnalyze
                 ? "bg-blue-600 hover:bg-blue-700 text-white"
                 : "bg-gray-200 text-gray-400 cursor-not-allowed"
             }`}
           >
-            Analyze Documents
+            {extracting ? "Extracting..." : "Analyze Documents"}
           </button>
         </div>
+
+        {extractResults !== null && (
+          <div className="mt-8 space-y-4">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Extraction Results
+            </h2>
+            {extractResults.map((result) => (
+              <div
+                key={result.filename}
+                className="bg-white rounded-xl shadow-sm p-6"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-medium text-gray-800">
+                    {result.filename}
+                  </h3>
+                  <span className="text-sm text-gray-500">
+                    {result.pages} page{result.pages !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600 whitespace-pre-line">
+                  {result.text.length > 200
+                    ? `${result.text.slice(0, 200)}...`
+                    : result.text}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </main>
   );
