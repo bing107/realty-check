@@ -32,7 +32,6 @@ const mockWriteFile = writeFile as jest.MockedFunction<typeof writeFile>;
 // The route does `const mod = await import("pdf-parse/lib/pdf-parse")`
 // then `mod.default ?? mod`. Our mock provides `{ default: jest.fn() }`,
 // so `mod.default` is the mock function. We access it via require().
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const mockPdfParse = require("pdf-parse/lib/pdf-parse").default as jest.Mock;
 
 function buildRequest(body: unknown): NextRequest {
