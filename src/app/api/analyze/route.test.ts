@@ -298,12 +298,15 @@ describe('POST /api/analyze', () => {
     expect(body.savedAs).toMatch(/^analysis-.*\.json$/);
   });
 
-  it('propagates error when Claude API call throws', async () => {
+  it('returns 500 when Claude API call throws', async () => {
     mockFsReadFile.mockResolvedValue('Extracted text');
 
     const mockCreate = jest.fn().mockRejectedValue(new Error('API rate limit exceeded'));
     MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
 
-    await expect(POST(makeRequest({ files: ['doc.pdf'] }))).rejects.toThrow('API rate limit exceeded');
+    const res = await POST(makeRequest({ files: ['doc.pdf'] }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toMatch(/API rate limit exceeded/);
   });
 });
