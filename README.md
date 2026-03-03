@@ -24,6 +24,12 @@ Surfaces renovation plans, Sonderumlagen, maintenance backlog, and budget detail
 
 ![Protocol findings and Wirtschaftsplan](docs/screenshot-details.png)
 
+### Market Price Comparison & Investment Report
+
+Compares the property's price per m² against city-level market data (35+ German cities), with acquisition cost breakdown, cash flow projection, and AI-generated investment summary.
+
+![Market comparison and investment report](docs/screenshot-dashboard.png)
+
 ## Features
 
 - **PDF Upload** — drag-and-drop or click to upload broker PDFs via `react-dropzone`
@@ -33,6 +39,7 @@ Surfaces renovation plans, Sonderumlagen, maintenance backlog, and budget detail
   - Kaufnebenkosten (purchase costs: Grunderwerbsteuer, Notar, Grundbuch, Makler)
   - Net rental yield
   - Cashflow analysis
+- **Market Price Comparison** — compares price/m² against city-level reference data for 35+ German cities, with percentile ranking and price trend
 - **Visualization** — charts via `recharts`
 
 ## Tech Stack
@@ -64,6 +71,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `/api/extract` | POST | Extract text from uploaded PDFs |
 | `/api/analyze` | POST | AI analysis of extracted property data |
 | `/api/calculate` | POST | Calculate investment metrics |
+| `/api/compare` | POST | Compare price/m² against market data |
 
 ## Project Structure
 
@@ -73,6 +81,7 @@ src/
 │   ├── api/
 │   │   ├── analyze/       # Claude-powered property analysis
 │   │   ├── calculate/     # Investment metric calculations
+│   │   ├── compare/       # Market price comparison
 │   │   ├── extract/       # PDF text extraction
 │   │   └── upload/        # File upload handling
 │   ├── components/
@@ -80,7 +89,8 @@ src/
 │   ├── layout.tsx
 │   └── page.tsx           # Main UI
 ├── lib/
-│   └── calculator.ts      # Investment calculation logic
+│   ├── calculator.ts      # Investment calculation logic
+│   └── market-data.ts     # City-level market reference data
 └── types/
     └── pdf-parse.d.ts     # Type definitions
 ```
