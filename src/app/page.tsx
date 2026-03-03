@@ -10,15 +10,24 @@ interface ExtractResult {
   extractedAt: string;
 }
 
+interface ExtractError {
+  filename: string;
+  error: string;
+}
+
 export default function Home() {
   const [savedFiles, setSavedFiles] = useState<string[]>([]);
   const [extracting, setExtracting] = useState(false);
   const [extractResults, setExtractResults] = useState<ExtractResult[] | null>(
     null
   );
+  const [extractErrors, setExtractErrors] = useState<ExtractError[]>([]);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   async function handleAnalyze() {
     setExtracting(true);
+    setFetchError(null);
+    setExtractErrors([]);
     try {
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -27,6 +36,9 @@ export default function Home() {
       });
       const data = await res.json();
       setExtractResults(data.results);
+      setExtractErrors(data.errors ?? []);
+    } catch {
+      setFetchError("Failed to extract documents. Please try again.");
     } finally {
       setExtracting(false);
     }
@@ -59,6 +71,31 @@ export default function Home() {
             {extracting ? "Extracting..." : "Analyze Documents"}
           </button>
         </div>
+
+        {fetchError && (
+          <div className="mt-8 bg-red-50 border border-red-200 rounded-xl p-4">
+            <p className="text-red-700">{fetchError}</p>
+          </div>
+        )}
+
+        {extractErrors.length > 0 && (
+          <div className="mt-8 space-y-2">
+            <h2 className="text-xl font-semibold text-red-700">
+              Extraction Errors
+            </h2>
+            {extractErrors.map((err) => (
+              <div
+                key={err.filename}
+                className="bg-red-50 border border-red-200 rounded-xl p-4"
+              >
+                <span className="font-medium text-gray-800">
+                  {err.filename}:
+                </span>{" "}
+                <span className="text-red-600">{err.error}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {extractResults !== null && (
           <div className="mt-8 space-y-4">

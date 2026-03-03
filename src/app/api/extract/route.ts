@@ -37,6 +37,11 @@ export async function POST(request: NextRequest) {
   for (const filename of files) {
     try {
       const filePath = path.join(UPLOAD_DIR, filename);
+      if (!filePath.startsWith(UPLOAD_DIR + path.sep)) {
+        errors.push({ filename, error: "Invalid filename" });
+        continue;
+      }
+
       const buffer = await readFile(filePath);
       const result = await parsePdf(buffer);
 
@@ -46,7 +51,12 @@ export async function POST(request: NextRequest) {
           "OCR not supported: this appears to be a scanned PDF with no extractable text.";
       }
 
-      await writeFile(path.join(UPLOAD_DIR, `${filename}.txt`), text);
+      const outPath = path.join(UPLOAD_DIR, `${filename}.txt`);
+      if (!outPath.startsWith(UPLOAD_DIR + path.sep)) {
+        errors.push({ filename, error: "Invalid filename" });
+        continue;
+      }
+      await writeFile(outPath, text);
 
       results.push({
         filename,
