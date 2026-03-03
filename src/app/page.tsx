@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import UploadZone from "./components/UploadZone";
 import ApiKeyInput from "./components/ApiKeyInput";
 import ResultsDashboard from "./components/ResultsDashboard";
@@ -63,7 +63,7 @@ function formatEur(value: number | null): string {
 
 export default function Home() {
   const [apiKey, setApiKey] = useState("");
-  const [savedFiles, setSavedFiles] = useState<string[]>([]);
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [extracting, setExtracting] = useState(false);
   const [extractResults, setExtractResults] = useState<ExtractResult[] | null>(
     null
@@ -84,15 +84,21 @@ export default function Home() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
 
+  const handleFilesChange = useCallback((files: File[]) => {
+    setPdfFiles(files);
+  }, []);
+
   async function handleAnalyze() {
     setExtracting(true);
     setFetchError(null);
     setExtractErrors([]);
     try {
+      const formData = new FormData();
+      pdfFiles.forEach((file) => formData.append("files", file));
+
       const res = await fetch("/api/extract", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files: savedFiles }),
+        body: formData,
       });
       const data = await res.json();
       setExtractResults(data.results);
@@ -105,13 +111,18 @@ export default function Home() {
   }
 
   async function handleAiAnalysis() {
+    if (!extractResults) return;
     setAnalyzeLoading(true);
     setAnalyzeError(null);
     try {
+      const texts = extractResults
+        .filter((r) => r.text && !r.text.startsWith("OCR not supported"))
+        .map((r) => ({ filename: r.filename, text: r.text }));
+
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
-        body: JSON.stringify({ files: savedFiles }),
+        body: JSON.stringify({ texts }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -165,7 +176,7 @@ export default function Home() {
     }
   }
 
-  const canAnalyze = savedFiles.length > 0 && !extracting;
+  const canAnalyze = pdfFiles.length > 0 && !extracting;
   const hasUsableExtracts =
     extractResults !== null &&
     extractResults.some(
@@ -190,7 +201,7 @@ export default function Home() {
 
         <div className="bg-white rounded-2xl shadow-sm p-8">
           <ApiKeyInput value={apiKey} onChange={setApiKey} />
-          <UploadZone onUploadedChange={setSavedFiles} />
+          <UploadZone onFilesChange={handleFilesChange} />
 
           <button
             disabled={!canAnalyze}

@@ -67,9 +67,8 @@ Open [http://localhost:3000](http://localhost:3000).
 
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/upload` | POST | Upload PDF files |
-| `/api/extract` | POST | Extract text from uploaded PDFs |
-| `/api/analyze` | POST | AI analysis of extracted property data |
+| `/api/extract` | POST | Extract text from PDFs (accepts FormData) |
+| `/api/analyze` | POST | AI analysis of extracted text |
 | `/api/calculate` | POST | Calculate investment metrics |
 | `/api/compare` | POST | Compare price/m² against market data |
 
@@ -82,8 +81,7 @@ src/
 │   │   ├── analyze/       # Claude-powered property analysis
 │   │   ├── calculate/     # Investment metric calculations
 │   │   ├── compare/       # Market price comparison
-│   │   ├── extract/       # PDF text extraction
-│   │   └── upload/        # File upload handling
+│   │   └── extract/       # PDF text extraction
 │   ├── components/
 │   │   └── UploadZone.tsx # Drag-and-drop upload component
 │   ├── layout.tsx

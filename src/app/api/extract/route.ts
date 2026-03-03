@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFile, writeFile } from "fs/promises";
-import path from "path";
-// Dynamic import avoids pdf-parse's index.js debug code that tries
-// to read a test PDF at module init time (breaks Next.js build).
+
 async function parsePdf(buffer: Buffer) {
   const mod = await import("pdf-parse/lib/pdf-parse");
   const pdfParse = mod.default ?? mod;
   return pdfParse(buffer) as Promise<{ numpages: number; text: string }>;
 }
-
-const UPLOAD_DIR = path.join(process.env.VERCEL ? "/tmp" : process.cwd(), "uploads");
 
 interface ExtractResult {
   filename: string;
@@ -24,25 +19,36 @@ interface ExtractError {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
-  const files: string[] = body.files;
+  const formData = await request.formData().catch(() => null);
+  if (!formData) {
+    return NextResponse.json({ results: [], errors: [] });
+  }
 
-  if (!files || !Array.isArray(files) || files.length === 0) {
+  const files = formData.getAll("files") as File[];
+  if (files.length === 0) {
     return NextResponse.json({ results: [], errors: [] });
   }
 
   const results: ExtractResult[] = [];
   const errors: ExtractError[] = [];
 
-  for (const filename of files) {
+  for (const file of files) {
     try {
-      const filePath = path.join(UPLOAD_DIR, filename);
-      if (!filePath.startsWith(UPLOAD_DIR + path.sep)) {
-        errors.push({ filename, error: "Invalid filename" });
+      const bytes = await file.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+
+      // Validate PDF magic bytes
+      if (
+        buffer.length < 4 ||
+        buffer[0] !== 0x25 ||
+        buffer[1] !== 0x50 ||
+        buffer[2] !== 0x44 ||
+        buffer[3] !== 0x46
+      ) {
+        errors.push({ filename: file.name, error: "Not a valid PDF file" });
         continue;
       }
 
-      const buffer = await readFile(filePath);
       const result = await parsePdf(buffer);
 
       let text = result.text.trim();
@@ -51,22 +57,15 @@ export async function POST(request: NextRequest) {
           "OCR not supported: this appears to be a scanned PDF with no extractable text.";
       }
 
-      const outPath = path.join(UPLOAD_DIR, `${filename}.txt`);
-      if (!outPath.startsWith(UPLOAD_DIR + path.sep)) {
-        errors.push({ filename, error: "Invalid filename" });
-        continue;
-      }
-      await writeFile(outPath, text);
-
       results.push({
-        filename,
+        filename: file.name,
         pages: result.numpages,
         text,
         extractedAt: new Date().toISOString(),
       });
     } catch (err) {
       errors.push({
-        filename,
+        filename: file.name,
         error: err instanceof Error ? err.message : "Unknown error",
       });
     }

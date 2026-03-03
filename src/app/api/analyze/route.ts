@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import fs from 'fs/promises';
-import path from 'path';
-
-const UPLOADS_DIR = path.join(process.env.VERCEL ? '/tmp' : process.cwd(), 'uploads');
 
 const SYSTEM_PROMPT = `You are an expert German real estate investment analyst. You analyze documents related to property purchases (Exposés, Teilungserklärungen, Protokolle, Wirtschaftspläne, etc.) and extract structured financial and risk data.
 
@@ -53,6 +49,11 @@ ${documentTexts}
 
 --- DOCUMENTS END ---`;
 
+interface DocumentText {
+  filename: string;
+  text: string;
+}
+
 interface AnalysisResult {
   property: {
     address: string | null;
@@ -88,8 +89,9 @@ interface AnalysisResult {
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  if (!body || !Array.isArray(body.files) || body.files.length === 0) {
-    return NextResponse.json({ error: 'files array required' }, { status: 400 });
+
+  if (!body || !Array.isArray(body.texts) || body.texts.length === 0) {
+    return NextResponse.json({ error: 'texts array required' }, { status: 400 });
   }
 
   const apiKey = req.headers.get('x-api-key') || process.env.ANTHROPIC_API_KEY;
@@ -100,37 +102,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Read extracted text files
-  const documentParts: string[] = [];
-  const errors: { filename: string; error: string }[] = [];
-
-  if (!body.files.every((f: unknown) => typeof f === 'string' && f.length > 0)) {
-    return NextResponse.json({ error: 'each file must be a non-empty string' }, { status: 400 });
+  const texts: DocumentText[] = body.texts;
+  if (!texts.every((t: unknown) => typeof t === 'object' && t !== null && 'filename' in t && 'text' in t)) {
+    return NextResponse.json({ error: 'each item in texts must have filename and text' }, { status: 400 });
   }
 
-  for (const filename of body.files) {
-    // Security: prevent path traversal
-    const safe = path.basename(filename);
-    const txtName = safe + '.txt';
-    const txtPath = path.join(UPLOADS_DIR, txtName);
-
-    try {
-      const text = await fs.readFile(txtPath, 'utf-8');
-      documentParts.push(`--- DOCUMENT: ${safe} ---\n${text}`);
-    } catch {
-      // Try reading the pdf text directly if txt not found
-      errors.push({ filename: safe, error: 'Extracted text not found — run extraction first' });
-    }
-  }
-
-  if (documentParts.length === 0) {
-    return NextResponse.json(
-      { error: 'No extracted text found. Please run text extraction first.', errors },
-      { status: 400 }
-    );
-  }
-
-  const documentTexts = documentParts.join('\n\n');
+  const documentTexts = texts
+    .map((t) => `--- DOCUMENT: ${t.filename} ---\n${t.text}`)
+    .join('\n\n');
 
   const client = new Anthropic({ apiKey });
 
@@ -154,7 +133,6 @@ export async function POST(req: NextRequest) {
 
   let analysis: AnalysisResult;
   try {
-    // Strip potential markdown code fences if Claude adds them
     const jsonText = content.text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
     analysis = JSON.parse(jsonText);
   } catch {
@@ -164,14 +142,5 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Save analysis result
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const outputPath = path.join(UPLOADS_DIR, `analysis-${timestamp}.json`);
-  try {
-    await fs.writeFile(outputPath, JSON.stringify(analysis, null, 2), 'utf-8');
-  } catch {
-    return NextResponse.json({ analysis, errors, saveError: 'Failed to persist result' });
-  }
-
-  return NextResponse.json({ analysis, errors, savedAs: `analysis-${timestamp}.json` });
+  return NextResponse.json({ analysis });
 }

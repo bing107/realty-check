@@ -6,10 +6,6 @@ import { useDropzone } from "react-dropzone";
 interface UploadFile {
   id: string;
   file: File;
-  status: "pending" | "uploading" | "done" | "error";
-  progress: number;
-  error?: string;
-  saved?: string;
 }
 
 function formatFileSize(bytes: number): string {
@@ -18,104 +14,28 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function uploadFile(
-  uploadFile: UploadFile,
-  onProgress: (progress: number) => void,
-  onDone: (saved: string) => void,
-  onError: (message: string) => void
-) {
-  const xhr = new XMLHttpRequest();
-  const formData = new FormData();
-  formData.append("file", uploadFile.file);
-
-  xhr.upload.addEventListener("progress", (e) => {
-    if (e.lengthComputable) {
-      const percent = Math.round((e.loaded / e.total) * 100);
-      onProgress(percent);
-    }
-  });
-
-  xhr.addEventListener("load", () => {
-    if (xhr.status >= 200 && xhr.status < 300) {
-      try {
-        const resp = JSON.parse(xhr.responseText);
-        onDone(resp.saved);
-      } catch {
-        onDone("");
-      }
-    } else {
-      let message = "Upload failed";
-      try {
-        const resp = JSON.parse(xhr.responseText);
-        if (resp.error) message = resp.error;
-      } catch {
-        // use default message
-      }
-      onError(message);
-    }
-  });
-
-  xhr.addEventListener("error", () => {
-    onError("Network error");
-  });
-
-  xhr.open("POST", "/api/upload");
-  xhr.send(formData);
-}
+const MAX_SIZE = 20 * 1024 * 1024; // 20MB
 
 interface UploadZoneProps {
-  onUploadedChange: (savedFiles: string[]) => void;
+  onFilesChange: (files: File[]) => void;
 }
 
-export default function UploadZone({ onUploadedChange }: UploadZoneProps) {
+export default function UploadZone({ onFilesChange }: UploadZoneProps) {
   const [files, setFiles] = useState<UploadFile[]>([]);
 
   useEffect(() => {
-    const savedFiles = files
-      .filter((f) => f.status === "done" && f.saved)
-      .map((f) => f.saved!);
-    onUploadedChange(savedFiles);
-  }, [files, onUploadedChange]);
+    onFilesChange(files.map((f) => f.file));
+  }, [files, onFilesChange]);
 
-  const updateFile = useCallback(
-    (id: string, updates: Partial<UploadFile>) => {
-      setFiles((prev) =>
-        prev.map((f) => (f.id === id ? { ...f, ...updates } : f))
-      );
-    },
-    []
-  );
-
-  const startUpload = useCallback(
-    (entry: UploadFile) => {
-      updateFile(entry.id, { status: "uploading", progress: 0 });
-      uploadFile(
-        entry,
-        (progress) => updateFile(entry.id, { progress }),
-        (saved) => updateFile(entry.id, { status: "done", progress: 100, saved }),
-        (error) => updateFile(entry.id, { status: "error", error })
-      );
-    },
-    [updateFile]
-  );
-
-  const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      const newEntries: UploadFile[] = acceptedFiles.map((file) => ({
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const newEntries: UploadFile[] = acceptedFiles
+      .filter((f) => f.size <= MAX_SIZE)
+      .map((file) => ({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         file,
-        status: "pending" as const,
-        progress: 0,
       }));
-
-      setFiles((prev) => [...prev, ...newEntries]);
-
-      newEntries.forEach((entry) => {
-        startUpload(entry);
-      });
-    },
-    [startUpload]
-  );
+    setFiles((prev) => [...prev, ...newEntries]);
+  }, []);
 
   const removeFile = useCallback((id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id));
@@ -124,7 +44,7 @@ export default function UploadZone({ onUploadedChange }: UploadZoneProps) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { "application/pdf": [".pdf"] },
-    maxSize: 20 * 1024 * 1024,
+    maxSize: MAX_SIZE,
     multiple: true,
   });
 
@@ -195,62 +115,13 @@ export default function UploadZone({ onUploadedChange }: UploadZoneProps) {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0 ml-4">
-                {f.status === "pending" && (
-                  <span className="text-xs font-medium text-gray-500 bg-gray-200 px-2 py-1 rounded-full">
-                    Pending
-                  </span>
-                )}
-                {f.status === "uploading" && (
-                  <span className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-                    {f.progress}%
-                  </span>
-                )}
-                {f.status === "done" && (
-                  <>
-                    <span className="text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded-full flex items-center gap-1">
-                      <svg
-                        className="h-3 w-3"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={3}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                      Done
-                    </span>
-                    <button
-                      onClick={() => removeFile(f.id)}
-                      className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-                      aria-label="Remove file"
-                    >
-                      &times;
-                    </button>
-                  </>
-                )}
-                {f.status === "error" && (
-                  <>
-                    <span
-                      className="text-xs font-medium text-red-600 bg-red-100 px-2 py-1 rounded-full max-w-[150px] truncate"
-                      title={f.error}
-                    >
-                      {f.error}
-                    </span>
-                    <button
-                      onClick={() => removeFile(f.id)}
-                      className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-                      aria-label="Remove file"
-                    >
-                      &times;
-                    </button>
-                  </>
-                )}
-              </div>
+              <button
+                onClick={() => removeFile(f.id)}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none shrink-0 ml-4"
+                aria-label="Remove file"
+              >
+                &times;
+              </button>
             </div>
           ))}
         </div>
