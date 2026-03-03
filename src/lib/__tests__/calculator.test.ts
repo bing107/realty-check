@@ -69,6 +69,11 @@ describe('grossRentalYield', () => {
   it('handles negative annual rent', () => {
     expect(grossRentalYield(-1200, 250000)).toBeCloseTo(-0.48, 2);
   });
+
+  it('handles negative purchase price gracefully', () => {
+    // Edge case: should not crash; result is mathematically correct but meaningless
+    expect(grossRentalYield(10800, -250000)).toBeCloseTo(-4.32, 2);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -125,6 +130,12 @@ describe('monthlyMortgagePayment', () => {
     const lowRate = monthlyMortgagePayment(200000, 0.02, 25);
     const highRate = monthlyMortgagePayment(200000, 0.05, 25);
     expect(highRate).toBeGreaterThan(lowRate);
+  });
+
+  it('handles very small loan amounts correctly', () => {
+    const payment = monthlyMortgagePayment(1, 0.035, 25);
+    expect(payment).toBeGreaterThan(0);
+    expect(payment).toBeLessThan(1);
   });
 });
 
@@ -193,6 +204,12 @@ describe('renovationReserveAdequacy', () => {
     expect(result.message).toContain('renovation');
     expect(result.message).toContain('backlog');
   });
+
+  it('treats negative ruecklage as inadequate', () => {
+    const result = renovationReserveAdequacy(-10, [], []);
+    expect(result.adequate).toBe(false);
+    expect(result.message).toContain('no reserve fund');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -213,6 +230,13 @@ describe('breakEvenYears', () => {
 
   it('returns null when annual cash flow is negative', () => {
     expect(breakEvenYears(250000, 15000, 5000, 8000, -1200, 0.20)).toBeNull();
+  });
+
+  it('computes break-even with zero purchase price (closing costs only)', () => {
+    // initialEquity = 0 * 0.20 + 15000 + 5000 + 8000 = 28000
+    // 28000 / 3600 = 7.778
+    const result = breakEvenYears(0, 15000, 5000, 8000, 3600, 0.20);
+    expect(result).toBeCloseTo(7.778, 2);
   });
 });
 
@@ -299,6 +323,48 @@ describe('computeMetrics', () => {
     expect(metrics.monthlyCashFlow).toBeNull();
     expect(metrics.pricePerSqm).toBeNull();
     expect(metrics.renovationReserveAdequacy).toBeNull();
+    expect(metrics.breakEvenYears).toBeNull();
+  });
+
+  it('uses expectedRent of 0 rather than falling back to currentRent', () => {
+    // expectedRent=0 should NOT fall back to currentRent via ??
+    // because ?? only coalesces null/undefined, not 0
+    const analysis: AnalysisResult = {
+      ...fullAnalysis,
+      financials: { ...fullAnalysis.financials, expectedRent: 0, currentRent: 800 },
+    };
+
+    const metrics = computeMetrics(analysis);
+    // annualRent = 0 * 12 = 0, grossYield = 0 / 250000 * 100 = 0
+    expect(metrics.grossRentalYield).toBe(0);
+  });
+
+  it('computes metrics with 100% down payment (no loan)', () => {
+    const metrics = computeMetrics(fullAnalysis, { downPayment: 1.0 });
+
+    // loanAmount = 250000 * (1 - 1.0) = 0
+    expect(metrics.monthlyMortgagePayment).toBe(0);
+
+    // monthlyCashFlow = 900 - 350 - 0 = 550
+    expect(metrics.monthlyCashFlow).toBe(550);
+
+    // breakEvenYears: annualCF = 550 * 12 = 6600
+    // initialEquity = 250000 * 1.0 + 15000 + 5000 + 8000 = 278000
+    // 278000 / 6600 = 42.121...
+    expect(metrics.breakEvenYears).toBeCloseTo(42.121, 2);
+  });
+
+  it('computes metrics with 0% down payment (full loan)', () => {
+    const metrics = computeMetrics(fullAnalysis, { downPayment: 0 });
+
+    // loanAmount = 250000 * 1.0 = 250000
+    // monthlyMortgage at 3.5%, 25yr on 250000 => ~1251.56
+    expect(metrics.monthlyMortgagePayment).toBeCloseTo(1251.56, 0);
+
+    // monthlyCashFlow = 900 - 350 - 1251.56 = -701.56
+    expect(metrics.monthlyCashFlow).toBeCloseTo(-701.56, 0);
+
+    // Negative cash flow => breakEvenYears is null
     expect(metrics.breakEvenYears).toBeNull();
   });
 
