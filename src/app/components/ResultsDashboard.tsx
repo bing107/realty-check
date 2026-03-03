@@ -18,7 +18,7 @@ import {
   Cell,
 } from "recharts";
 
-interface PriceComparison {
+export interface PriceComparison {
   city: string;
   areaAvgPerSqm: number;
   areaMinPerSqm: number;
@@ -466,7 +466,9 @@ export default function ResultsDashboard({
       )}
 
       {/* H: Renovation/Risk Timeline */}
-      {analysis.protocols.upcomingRenovations.length > 0 && (
+      {(analysis.protocols.upcomingRenovations.length > 0 ||
+        analysis.protocols.maintenanceBacklog.length > 0 ||
+        analysis.wirtschaftsplan.plannedMajorWorks.length > 0) && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-3">
             Upcoming Renovations &amp; Risks

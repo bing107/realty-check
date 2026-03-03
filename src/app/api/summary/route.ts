@@ -56,25 +56,31 @@ export async function POST(req: NextRequest) {
 
   const client = new Anthropic({ apiKey });
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: buildUserPrompt(analysis, metrics),
-      },
-    ],
-  });
+  let message: Awaited<ReturnType<typeof client.messages.create>>;
+  try {
+    message = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: buildUserPrompt(analysis, metrics),
+        },
+      ],
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Claude API error';
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 
-  const content = message.content[0];
-  if (content.type !== 'text') {
+  if (!message.content.length || message.content[0].type !== 'text') {
     return NextResponse.json(
       { error: 'Unexpected response from Claude' },
       { status: 500 },
     );
   }
+  const content = message.content[0];
 
   let parsed: {
     investmentSummary: string;

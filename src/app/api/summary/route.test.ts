@@ -121,9 +121,10 @@ describe('POST /api/summary', () => {
     const mockCreate = jest.fn().mockRejectedValue(new Error('API rate limit exceeded'));
     MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
 
-    await expect(
-      POST(makeRequest({ analysis: validAnalysis, metrics: validMetrics })),
-    ).rejects.toThrow('API rate limit exceeded');
+    const res = await POST(makeRequest({ analysis: validAnalysis, metrics: validMetrics }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe('API rate limit exceeded');
   });
 
   it('returns 500 when Claude returns invalid JSON text', async () => {
@@ -149,6 +150,16 @@ describe('POST /api/summary', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.investmentSummary).toBe(validClaudeResponse.investmentSummary);
+  });
+
+  it('returns 500 when Claude returns empty content array', async () => {
+    const mockCreate = jest.fn().mockResolvedValue({ content: [] });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({ analysis: validAnalysis, metrics: validMetrics }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toMatch(/Unexpected response/);
   });
 
   it('returns 500 when Claude returns non-text content type', async () => {

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import UploadZone from "./components/UploadZone";
 import ResultsDashboard from "./components/ResultsDashboard";
+import type { PriceComparison } from "./components/ResultsDashboard";
 import type { CalculatedMetrics } from "@/lib/calculator";
 
 interface ExtractResult {
@@ -48,13 +49,6 @@ interface AnalysisResult {
   };
   redFlags: string[];
   summary: string;
-}
-
-interface PriceComparison {
-  city: string;
-  areaAvgPerSqm: number;
-  areaMinPerSqm: number;
-  areaMaxPerSqm: number;
 }
 
 function formatEur(value: number | null): string {
