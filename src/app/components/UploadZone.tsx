@@ -9,6 +9,7 @@ interface UploadFile {
   status: "pending" | "uploading" | "done" | "error";
   progress: number;
   error?: string;
+  saved?: string;
 }
 
 function formatFileSize(bytes: number): string {
@@ -20,7 +21,7 @@ function formatFileSize(bytes: number): string {
 function uploadFile(
   uploadFile: UploadFile,
   onProgress: (progress: number) => void,
-  onDone: () => void,
+  onDone: (saved: string) => void,
   onError: (message: string) => void
 ) {
   const xhr = new XMLHttpRequest();
@@ -36,7 +37,12 @@ function uploadFile(
 
   xhr.addEventListener("load", () => {
     if (xhr.status >= 200 && xhr.status < 300) {
-      onDone();
+      try {
+        const resp = JSON.parse(xhr.responseText);
+        onDone(resp.saved);
+      } catch {
+        onDone("");
+      }
     } else {
       let message = "Upload failed";
       try {
@@ -58,15 +64,17 @@ function uploadFile(
 }
 
 interface UploadZoneProps {
-  onUploadedChange: (hasUploaded: boolean) => void;
+  onUploadedChange: (savedFiles: string[]) => void;
 }
 
 export default function UploadZone({ onUploadedChange }: UploadZoneProps) {
   const [files, setFiles] = useState<UploadFile[]>([]);
 
   useEffect(() => {
-    const hasUploaded = files.some((f) => f.status === "done");
-    onUploadedChange(hasUploaded);
+    const savedFiles = files
+      .filter((f) => f.status === "done" && f.saved)
+      .map((f) => f.saved!);
+    onUploadedChange(savedFiles);
   }, [files, onUploadedChange]);
 
   const updateFile = useCallback(
@@ -84,7 +92,7 @@ export default function UploadZone({ onUploadedChange }: UploadZoneProps) {
       uploadFile(
         entry,
         (progress) => updateFile(entry.id, { progress }),
-        () => updateFile(entry.id, { status: "done", progress: 100 }),
+        (saved) => updateFile(entry.id, { status: "done", progress: 100, saved }),
         (error) => updateFile(entry.id, { status: "error", error })
       );
     },
