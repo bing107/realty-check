@@ -109,12 +109,61 @@ describe('POST /api/summary', () => {
     expect(body.error).toMatch(/analysis and metrics/);
   });
 
-  it('returns 500 when ANTHROPIC_API_KEY is not configured', async () => {
+  it('returns 401 when no API key is provided (no header, no env var)', async () => {
     delete process.env.ANTHROPIC_API_KEY;
     const res = await POST(makeRequest({ analysis: validAnalysis, metrics: validMetrics }));
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error).toMatch(/ANTHROPIC_API_KEY/);
+    expect(body.error).toMatch(/API key required/);
+  });
+
+  it('succeeds when API key is provided via X-API-Key header (no env var)', async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(validClaudeResponse) }],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const req = new NextRequest('http://localhost/api/summary', {
+      method: 'POST',
+      body: JSON.stringify({ analysis: validAnalysis, metrics: validMetrics }),
+      headers: { 'content-type': 'application/json', 'x-api-key': 'header-key-123' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(MockAnthropic).toHaveBeenCalledWith({ apiKey: 'header-key-123' });
+  });
+
+  it('falls back to env var when no X-API-Key header is provided', async () => {
+    process.env.ANTHROPIC_API_KEY = 'env-key-456';
+
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(validClaudeResponse) }],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({ analysis: validAnalysis, metrics: validMetrics }));
+    expect(res.status).toBe(200);
+    expect(MockAnthropic).toHaveBeenCalledWith({ apiKey: 'env-key-456' });
+  });
+
+  it('prefers X-API-Key header over env var when both are present', async () => {
+    process.env.ANTHROPIC_API_KEY = 'env-key-456';
+
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(validClaudeResponse) }],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const req = new NextRequest('http://localhost/api/summary', {
+      method: 'POST',
+      body: JSON.stringify({ analysis: validAnalysis, metrics: validMetrics }),
+      headers: { 'content-type': 'application/json', 'x-api-key': 'header-key-789' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(MockAnthropic).toHaveBeenCalledWith({ apiKey: 'header-key-789' });
   });
 
   it('returns 500 when Claude API call throws', async () => {

@@ -65,13 +65,68 @@ describe('POST /api/analyze', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 500 when ANTHROPIC_API_KEY is not set', async () => {
+  it('returns 401 when no API key is provided (no header, no env var)', async () => {
     delete process.env.ANTHROPIC_API_KEY;
     mockFsReadFile.mockResolvedValue('some text');
     const res = await POST(makeRequest({ files: ['test.pdf'] }));
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error).toMatch(/ANTHROPIC_API_KEY/);
+    expect(body.error).toMatch(/API key required/);
+  });
+
+  it('succeeds when API key is provided via X-API-Key header (no env var)', async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    mockFsReadFile.mockResolvedValue('Extracted document text');
+    mockFsWriteFile.mockResolvedValue(undefined);
+
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const req = new NextRequest('http://localhost/api/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ files: ['test.pdf'] }),
+      headers: { 'content-type': 'application/json', 'x-api-key': 'header-key-123' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(MockAnthropic).toHaveBeenCalledWith({ apiKey: 'header-key-123' });
+  });
+
+  it('falls back to env var when no X-API-Key header is provided', async () => {
+    process.env.ANTHROPIC_API_KEY = 'env-key-456';
+    mockFsReadFile.mockResolvedValue('Extracted document text');
+    mockFsWriteFile.mockResolvedValue(undefined);
+
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({ files: ['test.pdf'] }));
+    expect(res.status).toBe(200);
+    expect(MockAnthropic).toHaveBeenCalledWith({ apiKey: 'env-key-456' });
+  });
+
+  it('prefers X-API-Key header over env var when both are present', async () => {
+    process.env.ANTHROPIC_API_KEY = 'env-key-456';
+    mockFsReadFile.mockResolvedValue('Extracted document text');
+    mockFsWriteFile.mockResolvedValue(undefined);
+
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const req = new NextRequest('http://localhost/api/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ files: ['test.pdf'] }),
+      headers: { 'content-type': 'application/json', 'x-api-key': 'header-key-789' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(MockAnthropic).toHaveBeenCalledWith({ apiKey: 'header-key-789' });
   });
 
   it('returns 400 when no extracted text files exist', async () => {
