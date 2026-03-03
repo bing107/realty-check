@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
   for (const filename of body.files) {
     // Security: prevent path traversal
     const safe = path.basename(filename);
-    const txtName = safe.replace(/\.pdf$/i, '.txt');
+    const txtName = safe + '.txt';
     const txtPath = path.join(UPLOADS_DIR, txtName);
 
     try {
@@ -134,17 +134,18 @@ export async function POST(req: NextRequest) {
 
   const client = new Anthropic({ apiKey });
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 4096,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: USER_PROMPT_TEMPLATE(documentTexts),
-      },
-    ],
-  });
+  let message: Awaited<ReturnType<typeof client.messages.create>>;
+  try {
+    message = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: USER_PROMPT_TEMPLATE(documentTexts) }],
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Claude API error';
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 
   const content = message.content[0];
   if (content.type !== 'text') {
