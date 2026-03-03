@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 
 interface UploadFile {
@@ -64,18 +64,18 @@ interface UploadZoneProps {
 export default function UploadZone({ onUploadedChange }: UploadZoneProps) {
   const [files, setFiles] = useState<UploadFile[]>([]);
 
+  useEffect(() => {
+    const hasUploaded = files.some((f) => f.status === "done");
+    onUploadedChange(hasUploaded);
+  }, [files, onUploadedChange]);
+
   const updateFile = useCallback(
     (id: string, updates: Partial<UploadFile>) => {
-      setFiles((prev) => {
-        const next = prev.map((f) =>
-          f.id === id ? { ...f, ...updates } : f
-        );
-        const hasUploaded = next.some((f) => f.status === "done");
-        onUploadedChange(hasUploaded);
-        return next;
-      });
+      setFiles((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, ...updates } : f))
+      );
     },
-    [onUploadedChange]
+    []
   );
 
   const startUpload = useCallback(
@@ -109,17 +109,9 @@ export default function UploadZone({ onUploadedChange }: UploadZoneProps) {
     [startUpload]
   );
 
-  const removeFile = useCallback(
-    (id: string) => {
-      setFiles((prev) => {
-        const next = prev.filter((f) => f.id !== id);
-        const hasUploaded = next.some((f) => f.status === "done");
-        onUploadedChange(hasUploaded);
-        return next;
-      });
-    },
-    [onUploadedChange]
-  );
+  const removeFile = useCallback((id: string) => {
+    setFiles((prev) => prev.filter((f) => f.id !== id));
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

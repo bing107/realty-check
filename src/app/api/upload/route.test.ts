@@ -32,12 +32,19 @@ import { writeFile, mkdir } from "fs/promises";
 const { File: NodeFile } = require("node:buffer");
 const FilePolyfill = NodeFile as typeof globalThis.File;
 
+// PDF magic bytes: %PDF
+const PDF_MAGIC = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+
 function createMockFile(
   name: string,
   size: number,
-  type: string
+  type: string,
+  { pdfMagic = false }: { pdfMagic?: boolean } = {}
 ): File {
-  const buffer = new ArrayBuffer(size);
+  const buffer = new Uint8Array(size);
+  if (pdfMagic && size >= 4) {
+    buffer.set(PDF_MAGIC);
+  }
   return new FilePolyfill([buffer], name, { type });
 }
 
@@ -66,8 +73,18 @@ describe("POST /api/upload", () => {
     expect(body.error).toBe("No file provided");
   });
 
-  it("returns 400 when file is not a PDF", async () => {
+  it("returns 400 when file does not have PDF magic bytes", async () => {
     const file = createMockFile("image.png", 1024, "image/png");
+    const req = buildRequest(file);
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Only PDF files are accepted");
+  });
+
+  it("returns 400 when file has PDF MIME type but wrong magic bytes", async () => {
+    const file = createMockFile("fake.pdf", 1024, "application/pdf");
     const req = buildRequest(file);
     const res = await POST(req);
 
@@ -78,7 +95,7 @@ describe("POST /api/upload", () => {
 
   it("returns 400 when file exceeds 20MB", async () => {
     const oversize = 21 * 1024 * 1024; // 21 MB
-    const file = createMockFile("big.pdf", oversize, "application/pdf");
+    const file = createMockFile("big.pdf", oversize, "application/pdf", { pdfMagic: true });
     const req = buildRequest(file);
     const res = await POST(req);
 
@@ -88,7 +105,7 @@ describe("POST /api/upload", () => {
   });
 
   it("returns 200 with saved filename for valid PDF under 20MB", async () => {
-    const file = createMockFile("report.pdf", 5000, "application/pdf");
+    const file = createMockFile("report.pdf", 5000, "application/pdf", { pdfMagic: true });
     const req = buildRequest(file);
     const res = await POST(req);
 
@@ -100,7 +117,7 @@ describe("POST /api/upload", () => {
   });
 
   it("creates upload directory and writes the file to disk", async () => {
-    const file = createMockFile("doc.pdf", 2048, "application/pdf");
+    const file = createMockFile("doc.pdf", 2048, "application/pdf", { pdfMagic: true });
     const req = buildRequest(file);
     await POST(req);
 
@@ -118,14 +135,15 @@ describe("POST /api/upload", () => {
     const file = createMockFile(
       "../../etc/passwd.pdf",
       100,
-      "application/pdf"
+      "application/pdf",
+      { pdfMagic: true }
     );
     const req = buildRequest(file);
     const res = await POST(req);
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    // slashes and dots (other than the extension dot) should be replaced
+    // slashes and consecutive dots should be replaced
     expect(body.saved).not.toContain("/");
     expect(body.saved).not.toContain("..");
   });
