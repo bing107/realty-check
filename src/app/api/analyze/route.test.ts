@@ -128,4 +128,127 @@ describe('POST /api/analyze', () => {
     const calledPath = mockFsReadFile.mock.calls[0][0] as string;
     expect(calledPath).not.toContain('..');
   });
+
+  it('returns 400 when request body is not valid JSON', async () => {
+    const req = new NextRequest('http://localhost/api/analyze', {
+      method: 'POST',
+      body: 'not-json{{{',
+      headers: { 'content-type': 'application/json' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/files array required/);
+  });
+
+  it('returns 500 when Claude returns non-text content type', async () => {
+    mockFsReadFile.mockResolvedValue('Extracted text');
+    mockFsWriteFile.mockResolvedValue(undefined);
+
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [{ type: 'tool_use', id: 'tool_1', name: 'some_tool', input: {} }],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({ files: ['doc.pdf'] }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toMatch(/Unexpected response/);
+  });
+
+  it('returns 500 when Claude returns invalid JSON text', async () => {
+    mockFsReadFile.mockResolvedValue('Extracted text');
+    mockFsWriteFile.mockResolvedValue(undefined);
+
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [{ type: 'text', text: 'This is not JSON at all' }],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({ files: ['doc.pdf'] }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toMatch(/Failed to parse/);
+    expect(body.raw).toBe('This is not JSON at all');
+  });
+
+  it('sends all document texts with correct separator format for multiple files', async () => {
+    mockFsReadFile
+      .mockResolvedValueOnce('Text from first document')
+      .mockResolvedValueOnce('Text from second document');
+    mockFsWriteFile.mockResolvedValue(undefined);
+
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({ files: ['doc1.pdf', 'doc2.pdf'] }));
+    expect(res.status).toBe(200);
+
+    // Verify Claude was called with both documents separated correctly
+    const callArgs = mockCreate.mock.calls[0][0];
+    const userContent = callArgs.messages[0].content;
+    expect(userContent).toContain('--- DOCUMENT: doc1.pdf ---');
+    expect(userContent).toContain('Text from first document');
+    expect(userContent).toContain('--- DOCUMENT: doc2.pdf ---');
+    expect(userContent).toContain('Text from second document');
+  });
+
+  it('returns partial success when some files are found and others are not', async () => {
+    mockFsReadFile
+      .mockResolvedValueOnce('Found document text')
+      .mockRejectedValueOnce(new Error('ENOENT'));
+    mockFsWriteFile.mockResolvedValue(undefined);
+
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({ files: ['found.pdf', 'missing.pdf'] }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    // Analysis should still proceed with the found file
+    expect(body.analysis).toEqual(validAnalysis);
+    // Errors should report the missing file
+    expect(body.errors).toHaveLength(1);
+    expect(body.errors[0].filename).toBe('missing.pdf');
+    expect(body.errors[0].error).toMatch(/extraction/i);
+  });
+
+  it('saves analysis result as a timestamped JSON file', async () => {
+    mockFsReadFile.mockResolvedValue('Extracted text');
+    mockFsWriteFile.mockResolvedValue(undefined);
+
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({ files: ['doc.pdf'] }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    // Verify writeFile was called to save the analysis
+    expect(mockFsWriteFile).toHaveBeenCalledTimes(1);
+    const writtenPath = mockFsWriteFile.mock.calls[0][0] as string;
+    const writtenContent = mockFsWriteFile.mock.calls[0][1] as string;
+
+    expect(writtenPath).toContain('uploads');
+    expect(writtenPath).toMatch(/analysis-.*\.json$/);
+    expect(JSON.parse(writtenContent)).toEqual(validAnalysis);
+    // The savedAs field in the response should match the filename
+    expect(body.savedAs).toMatch(/^analysis-.*\.json$/);
+  });
+
+  it('propagates error when Claude API call throws', async () => {
+    mockFsReadFile.mockResolvedValue('Extracted text');
+
+    const mockCreate = jest.fn().mockRejectedValue(new Error('API rate limit exceeded'));
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    await expect(POST(makeRequest({ files: ['doc.pdf'] }))).rejects.toThrow('API rate limit exceeded');
+  });
 });
