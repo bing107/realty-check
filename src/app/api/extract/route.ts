@@ -9,7 +9,7 @@ async function parsePdf(buffer: Buffer) {
   return pdfParse(buffer) as Promise<{ numpages: number; text: string }>;
 }
 
-const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+const UPLOAD_DIR = path.join(process.env.VERCEL ? "/tmp" : process.cwd(), "uploads");
 
 interface ExtractResult {
   filename: string;

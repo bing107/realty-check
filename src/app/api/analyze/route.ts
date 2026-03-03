@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs/promises';
 import path from 'path';
 
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
+const UPLOADS_DIR = path.join(process.env.VERCEL ? '/tmp' : process.cwd(), 'uploads');
 
 const SYSTEM_PROMPT = `You are an expert German real estate investment analyst. You analyze documents related to property purchases (Exposés, Teilungserklärungen, Protokolle, Wirtschaftspläne, etc.) and extract structured financial and risk data.
 

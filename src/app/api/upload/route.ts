@@ -3,7 +3,7 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
 const MAX_SIZE = 20 * 1024 * 1024; // 20MB
-const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+const UPLOAD_DIR = path.join(process.env.VERCEL ? "/tmp" : process.cwd(), "uploads");
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
