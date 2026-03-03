@@ -35,15 +35,17 @@ jobs:
       - name: Send repository_dispatch
         env:
           GH_TOKEN: ${{ secrets.DEV_AGENTS_PAT }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           gh api repos/bing107/dev-agents/dispatches \
             -f event_type=dev-agents-trigger \
-            -f 'client_payload[project]=${{ github.event.repository.name }}' \
-            -f 'client_payload[pipeline_type]=${{ steps.pipeline.outputs.type }}' \
-            -f 'client_payload[title]=${{ github.event.issue.title }}' \
-            -f 'client_payload[description]=${{ github.event.issue.body }}' \
-            -f 'client_payload[issue_url]=${{ github.event.issue.html_url }}' \
-            -f 'client_payload[task_id]=${{ github.event.repository.name }}-${{ github.event.issue.number }}'
+            -f "client_payload[project]=${{ github.event.repository.name }}" \
+            -f "client_payload[pipeline_type]=${{ steps.pipeline.outputs.type }}" \
+            -f "client_payload[title]=${ISSUE_TITLE}" \
+            -f "client_payload[description]=${ISSUE_BODY}" \
+            -f "client_payload[issue_url]=${{ github.event.issue.html_url }}" \
+            -f "client_payload[task_id]=${{ github.event.repository.name }}-${{ github.event.issue.number }}"
 
       - name: Comment on issue
         env:
