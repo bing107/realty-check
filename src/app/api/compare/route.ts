@@ -20,6 +20,7 @@ interface ComparisonResult {
 // ---------------------------------------------------------------------------
 
 const CACHE_TTL_MS = 60 * 60 * 1000;
+const MAX_CACHE_SIZE = 1000;
 
 const cache = new Map<string, { result: ComparisonResult; expiresAt: number }>();
 
@@ -34,6 +35,10 @@ function getCached(key: string): ComparisonResult | null {
 }
 
 function setCache(key: string, result: ComparisonResult): void {
+  if (cache.size >= MAX_CACHE_SIZE) {
+    // evict oldest entry
+    cache.delete(cache.keys().next().value!);
+  }
   cache.set(key, { result, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 

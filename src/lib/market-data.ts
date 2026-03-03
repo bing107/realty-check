@@ -95,7 +95,7 @@ function normalCDF(z: number): number {
 export function lookupCityData(address: string): { data: CityMarketData; matched: string } {
   const normalized = address.toLowerCase().trim();
 
-  // Check canonical city keys (longest first to avoid partial matches like "essen" in "gelsenkirchen")
+  // Check canonical city keys longest-first so e.g. 'neuessen' resolves before 'essen'
   const canonicalKeys = Object.keys(CITY_MARKET_DATA).filter((k) => k !== 'default');
   canonicalKeys.sort((a, b) => b.length - a.length);
 

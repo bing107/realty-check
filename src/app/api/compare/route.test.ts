@@ -1,6 +1,12 @@
 /** @jest-environment node */
 import { POST } from './route';
 import { NextRequest } from 'next/server';
+import { lookupCityData } from '../../../lib/market-data';
+
+jest.mock('../../../lib/market-data', () => {
+  const actual = jest.requireActual('../../../lib/market-data');
+  return { ...actual, lookupCityData: jest.fn(actual.lookupCityData) };
+});
 
 function makeRequest(body: unknown) {
   return new NextRequest('http://localhost/api/compare', {
@@ -149,24 +155,24 @@ describe('POST /api/compare', () => {
     expect(data.error).toBeDefined();
   });
 
-  // 14. Returns 400 when price is NaN
-  it('returns 400 when price is NaN', async () => {
+  // 14. NaN becomes null via JSON.stringify, rejected by typeof !== 'number'
+  it('returns 400 when price is NaN (serialized as null)', async () => {
     const res = await POST(makeRequest({ address: 'Berlin', price: NaN, sqm: 75 }));
     expect(res.status).toBe(400);
     const data = await res.json();
     expect(data.error).toMatch(/price/i);
   });
 
-  // 15. Returns 400 when price is Infinity
-  it('returns 400 when price is Infinity', async () => {
+  // 15. Infinity becomes null via JSON.stringify, rejected by typeof !== 'number'
+  it('returns 400 when price is Infinity (serialized as null)', async () => {
     const res = await POST(makeRequest({ address: 'Berlin', price: Infinity, sqm: 75 }));
     expect(res.status).toBe(400);
     const data = await res.json();
     expect(data.error).toMatch(/price/i);
   });
 
-  // 16. Returns 400 when sqm is NaN
-  it('returns 400 when sqm is NaN', async () => {
+  // 16. NaN becomes null via JSON.stringify, rejected by typeof !== 'number'
+  it('returns 400 when sqm is NaN (serialized as null)', async () => {
     const res = await POST(makeRequest({ address: 'Berlin', price: 300000, sqm: NaN }));
     expect(res.status).toBe(400);
     const data = await res.json();
@@ -247,23 +253,22 @@ describe('POST /api/compare', () => {
   // 25. Cache TTL expiry: expired entries are not returned
   it('does not return expired cache entries', async () => {
     jest.useFakeTimers();
+    const mock = lookupCityData as jest.Mock;
+    mock.mockClear();
     try {
       const body = { address: 'Freiburg Altstadt', price: 412500, sqm: 75 };
 
       const res1 = await POST(makeRequest(body));
       expect(res1.status).toBe(200);
-      const data1 = await res1.json();
+      expect(mock).toHaveBeenCalledTimes(1);
 
       // Advance time past the 1-hour TTL
       jest.advanceTimersByTime(60 * 60 * 1000 + 1);
 
       const res2 = await POST(makeRequest(body));
       expect(res2.status).toBe(200);
-      const data2 = await res2.json();
-
-      // Both should still produce valid results (just not from a stale cache)
-      expect(data2.city).toBe('Freiburg');
-      expect(data2.pricePerSqm).toBe(data1.pricePerSqm);
+      // lookupCityData must be called again, proving the cache entry expired
+      expect(mock).toHaveBeenCalledTimes(2);
     } finally {
       jest.useRealTimers();
     }
@@ -286,8 +291,8 @@ describe('POST /api/compare', () => {
     expect(data.avgPricePerSqm).toBe(5500);
   });
 
-  // 28. Returns 400 when price is -Infinity
-  it('returns 400 when price is -Infinity', async () => {
+  // 28. -Infinity becomes null via JSON.stringify, rejected by typeof !== 'number'
+  it('returns 400 when price is -Infinity (serialized as null)', async () => {
     const res = await POST(makeRequest({ address: 'Berlin', price: -Infinity, sqm: 75 }));
     expect(res.status).toBe(400);
   });
