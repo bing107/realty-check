@@ -6,13 +6,7 @@ import ApiKeyInput from "./components/ApiKeyInput";
 import ResultsDashboard from "./components/ResultsDashboard";
 import type { PriceComparison } from "./components/ResultsDashboard";
 import type { CalculatedMetrics } from "@/lib/calculator";
-
-interface ExtractResult {
-  filename: string;
-  pages: number;
-  text: string;
-  extractedAt: string;
-}
+import { extractTextFromPdf, type ExtractResult } from "@/lib/pdf-extract";
 
 interface ExtractError {
   filename: string;
@@ -93,16 +87,23 @@ export default function Home() {
     setFetchError(null);
     setExtractErrors([]);
     try {
-      const formData = new FormData();
-      pdfFiles.forEach((file) => formData.append("files", file));
+      const results: ExtractResult[] = [];
+      const errors: ExtractError[] = [];
 
-      const res = await fetch("/api/extract", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      setExtractResults(data.results);
-      setExtractErrors(data.errors ?? []);
+      for (const file of pdfFiles) {
+        try {
+          const result = await extractTextFromPdf(file);
+          results.push(result);
+        } catch (err) {
+          errors.push({
+            filename: file.name,
+            error: err instanceof Error ? err.message : "Failed to extract",
+          });
+        }
+      }
+
+      setExtractResults(results);
+      setExtractErrors(errors);
     } catch {
       setFetchError("Failed to extract documents. Please try again.");
     } finally {
