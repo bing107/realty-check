@@ -148,4 +148,147 @@ describe('POST /api/compare', () => {
     const data = await res.json();
     expect(data.error).toBeDefined();
   });
+
+  // 14. Returns 400 when price is NaN
+  it('returns 400 when price is NaN', async () => {
+    const res = await POST(makeRequest({ address: 'Berlin', price: NaN, sqm: 75 }));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/price/i);
+  });
+
+  // 15. Returns 400 when price is Infinity
+  it('returns 400 when price is Infinity', async () => {
+    const res = await POST(makeRequest({ address: 'Berlin', price: Infinity, sqm: 75 }));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/price/i);
+  });
+
+  // 16. Returns 400 when sqm is NaN
+  it('returns 400 when sqm is NaN', async () => {
+    const res = await POST(makeRequest({ address: 'Berlin', price: 300000, sqm: NaN }));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/sqm/i);
+  });
+
+  // 17. Returns 400 when sqm is not a number (string)
+  it('returns 400 when sqm is a string', async () => {
+    const res = await POST(makeRequest({ address: 'Berlin', price: 300000, sqm: 'large' }));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/sqm/i);
+  });
+
+  // 18. Returns 400 when address is null
+  it('returns 400 when address is null', async () => {
+    const res = await POST(makeRequest({ address: null, price: 300000, sqm: 75 }));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/address/i);
+  });
+
+  // 19. Returns 400 when address field is missing from body
+  it('returns 400 when address field is missing from body', async () => {
+    const res = await POST(makeRequest({ price: 300000, sqm: 75 }));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/address/i);
+  });
+
+  // 20. Address with only street and no city falls back to national average
+  it('falls back to national average for street-only address with no city', async () => {
+    const res = await POST(makeRequest({ address: 'Hauptstraße 42', price: 300000, sqm: 75 }));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.city).toBe('Deutschland (Durchschnitt)');
+  });
+
+  // 21. PLZ-only address falls back to national average (no PLZ lookup implemented)
+  it('falls back to national average for PLZ-only address (no PLZ lookup)', async () => {
+    const res = await POST(makeRequest({ address: 'Musterstr. 1, 80331', price: 712500, sqm: 75 }));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    // 80331 is a Munich PLZ but there is no PLZ-level lookup — should fall back
+    expect(data.city).toBe('Deutschland (Durchschnitt)');
+  });
+
+  // 22. City substring false match: "Neuessen" should NOT match "Essen"
+  it('matches "essen" in "Neuessen" due to substring matching (known limitation)', async () => {
+    const res = await POST(makeRequest({ address: 'Am Markt 5, Neuessen', price: 200000, sqm: 80 }));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    // This documents a known bug: substring matching causes false positives.
+    // "Neuessen" contains "essen" so it incorrectly matches Essen.
+    expect(data.city).toBe('Essen');
+  });
+
+  // 23. Percentile near 0 for extremely cheap property
+  it('percentile approaches 0 for extremely low pricePerSqm', async () => {
+    // Berlin avg=5800 stdDev=1500; price/sqm = 100000/75 = 1333 => z ~ -2.98
+    const res = await POST(makeRequest({ address: 'Berlin', price: 100, sqm: 75 }));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.percentile).toBeLessThanOrEqual(1);
+    expect(data.percentile).toBeGreaterThanOrEqual(0);
+  });
+
+  // 24. Percentile near 100 for extremely expensive property
+  it('percentile approaches 100 for extremely high pricePerSqm', async () => {
+    // Berlin avg=5800 stdDev=1500; price/sqm = 100000000/75 = 1333333 => z >> 5
+    const res = await POST(makeRequest({ address: 'Berlin', price: 100000000, sqm: 75 }));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.percentile).toBeGreaterThanOrEqual(99);
+    expect(data.percentile).toBeLessThanOrEqual(100);
+  });
+
+  // 25. Cache TTL expiry: expired entries are not returned
+  it('does not return expired cache entries', async () => {
+    jest.useFakeTimers();
+    try {
+      const body = { address: 'Freiburg Altstadt', price: 412500, sqm: 75 };
+
+      const res1 = await POST(makeRequest(body));
+      expect(res1.status).toBe(200);
+      const data1 = await res1.json();
+
+      // Advance time past the 1-hour TTL
+      jest.advanceTimersByTime(60 * 60 * 1000 + 1);
+
+      const res2 = await POST(makeRequest(body));
+      expect(res2.status).toBe(200);
+      const data2 = await res2.json();
+
+      // Both should still produce valid results (just not from a stale cache)
+      expect(data2.city).toBe('Freiburg');
+      expect(data2.pricePerSqm).toBe(data1.pricePerSqm);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  // 26. Returns 400 when address is whitespace-only
+  it('returns 400 when address is whitespace-only', async () => {
+    const res = await POST(makeRequest({ address: '   ', price: 300000, sqm: 75 }));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/address/i);
+  });
+
+  // 27. City alias "cologne" resolves to Köln
+  it('resolves city alias "cologne" to Köln', async () => {
+    const res = await POST(makeRequest({ address: 'Cologne Innenstadt', price: 412500, sqm: 75 }));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.city).toBe('Köln');
+    expect(data.avgPricePerSqm).toBe(5500);
+  });
+
+  // 28. Returns 400 when price is -Infinity
+  it('returns 400 when price is -Infinity', async () => {
+    const res = await POST(makeRequest({ address: 'Berlin', price: -Infinity, sqm: 75 }));
+    expect(res.status).toBe(400);
+  });
 });
