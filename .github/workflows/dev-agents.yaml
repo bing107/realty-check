@@ -1,0 +1,54 @@
+# Copy this file to .github/workflows/dev-agents.yaml in your target repo.
+#
+# Prerequisites:
+#   1. Create a PAT with `repo` scope on bing107/dev-agents
+#   2. Add it as repository secret `DEV_AGENTS_PAT` on this repo
+#   3. Create a `dev-agents` label on this repo
+#   4. Ensure repo name matches a project in dev-agents data/context/projects/
+
+name: Dispatch to dev-agents
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  dispatch:
+    if: github.event.label.name == 'dev-agents'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine pipeline type
+        id: pipeline
+        run: |
+          LABELS='${{ toJSON(github.event.issue.labels.*.name) }}'
+          if echo "$LABELS" | grep -q '"bug"'; then
+            echo "type=bugfix" >> "$GITHUB_OUTPUT"
+          elif echo "$LABELS" | grep -q '"hotfix"'; then
+            echo "type=hotfix" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=feature" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send repository_dispatch
+        env:
+          GH_TOKEN: ${{ secrets.DEV_AGENTS_PAT }}
+        run: |
+          gh api repos/bing107/dev-agents/dispatches \
+            -f event_type=dev-agents-trigger \
+            -f 'client_payload[project]=${{ github.event.repository.name }}' \
+            -f 'client_payload[pipeline_type]=${{ steps.pipeline.outputs.type }}' \
+            -f 'client_payload[title]=${{ github.event.issue.title }}' \
+            -f 'client_payload[description]=${{ github.event.issue.body }}' \
+            -f 'client_payload[issue_url]=${{ github.event.issue.html_url }}' \
+            -f 'client_payload[task_id]=${{ github.event.repository.name }}-${{ github.event.issue.number }}'
+
+      - name: Comment on issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "Pipeline dispatched to [dev-agents](https://github.com/bing107/dev-agents/actions). Type: \`${{ steps.pipeline.outputs.type }}\`, Task ID: \`${{ github.event.repository.name }}-${{ github.event.issue.number }}\`"
