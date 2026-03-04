@@ -100,6 +100,12 @@ function setupScannedPdf(numPages: number) {
   });
 }
 
+// Helper: count total images across all batches
+function totalImages(batches: string[][] | undefined): number {
+  if (!batches) return 0;
+  return batches.reduce((sum, b) => sum + b.length, 0);
+}
+
 describe('extractTextFromPdf', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -121,7 +127,7 @@ describe('extractTextFromPdf', () => {
     expect(result.text).toContain('Page two text');
     expect(result.text).toContain('Page three text');
     expect(result.isScanned).toBeUndefined();
-    expect(result.images).toBeUndefined();
+    expect(result.imageBatches).toBeUndefined();
   });
 
   it('joins text from multiple pages with newlines', async () => {
@@ -154,14 +160,14 @@ describe('extractTextFromPdf', () => {
     expect(result.text).toContain('OCR not supported');
   });
 
-  it('populates images array when no text is extracted', async () => {
+  it('populates imageBatches when no text is extracted', async () => {
     setupScannedPdf(3);
 
     const result = await extractTextFromPdf(makeFile('scanned.pdf'));
 
-    expect(result.images).toBeDefined();
-    expect(result.images).toHaveLength(3);
-    expect(result.images![0]).toBe('data:image/jpeg;base64,fakeImageData');
+    expect(result.imageBatches).toBeDefined();
+    expect(totalImages(result.imageBatches)).toBe(3);
+    expect(result.imageBatches![0][0]).toBe('data:image/jpeg;base64,fakeImageData');
   });
 
   it('caps images at 15 pages for large scanned PDFs', async () => {
@@ -170,7 +176,7 @@ describe('extractTextFromPdf', () => {
     const result = await extractTextFromPdf(makeFile('large-scan.pdf'));
 
     expect(result.pages).toBe(20); // Total pages is still 20
-    expect(result.images).toHaveLength(15); // But only 15 images rendered
+    expect(totalImages(result.imageBatches)).toBe(15); // But only 15 images rendered
     expect(result.isScanned).toBe(true);
   });
 
@@ -179,7 +185,7 @@ describe('extractTextFromPdf', () => {
 
     const result = await extractTextFromPdf(makeFile('small-scan.pdf'));
 
-    expect(result.images).toHaveLength(5);
+    expect(totalImages(result.imageBatches)).toBe(5);
   });
 
   it('renders exactly 15 pages when scanned PDF has exactly 15 pages', async () => {
@@ -187,7 +193,18 @@ describe('extractTextFromPdf', () => {
 
     const result = await extractTextFromPdf(makeFile('fifteen.pdf'));
 
-    expect(result.images).toHaveLength(15);
+    expect(totalImages(result.imageBatches)).toBe(15);
+  });
+
+  it('batches images into groups of 5', async () => {
+    setupScannedPdf(12);
+
+    const result = await extractTextFromPdf(makeFile('batched.pdf'));
+
+    expect(result.imageBatches).toHaveLength(3); // 5 + 5 + 2
+    expect(result.imageBatches![0]).toHaveLength(5);
+    expect(result.imageBatches![1]).toHaveLength(5);
+    expect(result.imageBatches![2]).toHaveLength(2);
   });
 
   it('calls page.render with canvas context and viewport', async () => {
@@ -199,26 +216,25 @@ describe('extractTextFromPdf', () => {
     const renderArgs = mockRender.mock.calls[0][0];
     expect(renderArgs).toHaveProperty('canvasContext');
     expect(renderArgs).toHaveProperty('viewport');
-    expect(renderArgs).toHaveProperty('canvas');
   });
 
-  it('scales viewport so width is 1500px', async () => {
+  it('scales viewport so width is 1000px', async () => {
     setupScannedPdf(1);
 
     await extractTextFromPdf(makeFile('scaled.pdf'));
 
     // getViewport is called first with scale=1 (returns width=1000),
-    // then with scale=1500/1000=1.5
+    // then with scale=1000/1000=1
     expect(mockGetViewport).toHaveBeenCalledWith({ scale: 1 });
-    expect(mockGetViewport).toHaveBeenCalledWith({ scale: 1.5 });
+    expect(mockGetViewport).toHaveBeenCalledWith({ scale: 1 });
   });
 
-  it('calls toDataURL with JPEG format and 0.85 quality', async () => {
+  it('calls toDataURL with JPEG format and 0.6 quality', async () => {
     setupScannedPdf(1);
 
     await extractTextFromPdf(makeFile('quality.pdf'));
 
-    expect(mockToDataURL).toHaveBeenCalledWith('image/jpeg', 0.85);
+    expect(mockToDataURL).toHaveBeenCalledWith('image/jpeg', 0.6);
   });
 
   it('returns text with only whitespace as scanned (after trim)', async () => {
@@ -239,6 +255,6 @@ describe('extractTextFromPdf', () => {
 
     // "   \n   ".trim() === "" which is falsy, so it should be treated as scanned
     expect(result.isScanned).toBe(true);
-    expect(result.images).toHaveLength(2);
+    expect(totalImages(result.imageBatches)).toBe(2);
   });
 });

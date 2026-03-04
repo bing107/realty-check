@@ -143,30 +143,41 @@ export default function Home() {
         }
       }
 
-      // OCR scanned documents
+      // OCR scanned documents (batches in parallel)
       for (const result of results) {
-        if (result.isScanned && result.images && result.images.length > 0) {
+        if (result.isScanned && result.imageBatches && result.imageBatches.length > 0) {
           try {
-            const ocrRes = await fetch("/api/ocr", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": apiKey,
-              },
-              body: JSON.stringify({
-                images: result.images,
-                filename: result.filename,
-              }),
-            });
-            const ocrData = await ocrRes.json();
-            if (ocrRes.ok) {
-              result.text = ocrData.text;
+            const batchPromises = result.imageBatches.map((batch) =>
+              fetch("/api/ocr", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-API-Key": apiKey,
+                },
+                body: JSON.stringify({
+                  images: batch,
+                  filename: result.filename,
+                }),
+              }).then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+            );
+            const batchResults = await Promise.all(batchPromises);
+            const texts: string[] = [];
+            let failed = false;
+            for (const br of batchResults) {
+              if (br.ok) {
+                texts.push(br.data.text);
+              } else {
+                failed = true;
+                errors.push({
+                  filename: result.filename,
+                  error: "OCR failed: " + br.data.error,
+                });
+                break;
+              }
+            }
+            if (!failed) {
+              result.text = texts.join("\n");
               result.ocrApplied = true;
-            } else {
-              errors.push({
-                filename: result.filename,
-                error: "OCR failed: " + ocrData.error,
-              });
             }
           } catch {
             errors.push({
