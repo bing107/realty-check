@@ -16,15 +16,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (!body.images.every((img: unknown) => typeof img === 'string')) {
+    return NextResponse.json({ error: 'images must be an array of base64 strings' }, { status: 400 });
+  }
   const images: string[] = body.images;
 
   const imageBlocks: Anthropic.ImageBlockParam[] = images.map((dataUrl) => {
-    const base64Data = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+    const match = dataUrl.match(/^data:(image\/(?:jpeg|png|gif|webp));base64,(.+)$/);
+    if (!match) throw new Error('Unsupported image format in OCR input');
+    const [, mediaType, base64Data] = match;
     return {
       type: 'image',
       source: {
         type: 'base64',
-        media_type: 'image/jpeg',
+        media_type: mediaType as Anthropic.Base64ImageSource['media_type'],
         data: base64Data,
       },
     };
@@ -56,7 +61,7 @@ export async function POST(req: NextRequest) {
   }
 
   const content = message.content[0];
-  if (content.type !== 'text') {
+  if (!content || content.type !== 'text') {
     return NextResponse.json({ error: 'Unexpected response from Claude' }, { status: 500 });
   }
 

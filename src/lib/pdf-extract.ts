@@ -3,6 +3,7 @@ export interface ExtractResult {
   pages: number;
   text: string;
   isScanned?: boolean;
+  ocrApplied?: boolean;
   images?: string[]; // base64 data URLs of rendered page images
 }
 
@@ -47,7 +48,8 @@ export async function extractTextFromPdf(file: File): Promise<ExtractResult> {
     const canvas = document.createElement("canvas");
     canvas.width = scaledViewport.width;
     canvas.height = scaledViewport.height;
-    const ctx = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Failed to get 2D canvas context for page " + i);
 
     await page.render({ canvasContext: ctx, viewport: scaledViewport, canvas }).promise;
     images.push(canvas.toDataURL("image/jpeg", 0.85));
