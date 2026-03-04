@@ -36,6 +36,12 @@ jest.mock('@/lib/posthog-server', () => ({
 
 const MockAnthropic = jest.requireMock('@anthropic-ai/sdk').default;
 const { serverTrack } = jest.requireMock('@/lib/posthog-server') as { serverTrack: jest.Mock };
+const { auth: mockAuth } = jest.requireMock('@/auth') as { auth: jest.Mock };
+const mockAuthConfig = jest.requireMock('@/lib/auth-config') as { isAuthEnabled: boolean };
+const { canRunAnalysis: mockCanRunAnalysis, incrementUsage: mockIncrementUsage } = jest.requireMock('@/lib/usage') as {
+  canRunAnalysis: jest.Mock;
+  incrementUsage: jest.Mock;
+};
 
 const validAnalysis = {
   property: { address: '123 Main St', sqm: 75, units: 12, yearBuilt: 1985, type: 'ETW' },
@@ -194,6 +200,76 @@ describe('POST /api/analyze', () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error).toMatch(/API rate limit exceeded/);
+  });
+
+  describe('Auth and usage limits (lines 117-132, 138, 178-181)', () => {
+    it('returns 403 when auth is enabled and usage limit is reached', async () => {
+      Object.assign(mockAuthConfig, { isAuthEnabled: true });
+      mockAuth.mockResolvedValue({ user: { id: 'user-123' } });
+      mockCanRunAnalysis.mockResolvedValue({
+        allowed: false,
+        tier: 'free',
+        used: 1,
+        limit: 1,
+      });
+
+      const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toBe('limit_reached');
+      expect(body.tier).toBe('free');
+      expect(body.used).toBe(1);
+      expect(body.limit).toBe(1);
+
+      // Restore
+      Object.assign(mockAuthConfig, { isAuthEnabled: false });
+    });
+
+    it('allows when auth is enabled and usage check passes', async () => {
+      Object.assign(mockAuthConfig, { isAuthEnabled: true });
+      mockAuth.mockResolvedValue({ user: { id: 'user-456' } });
+      mockCanRunAnalysis.mockResolvedValue({ allowed: true, tier: 'pro' });
+
+      const mockCreate = jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+      });
+      MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+      const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
+      expect(res.status).toBe(200);
+      expect(mockIncrementUsage).toHaveBeenCalledWith('user-456');
+
+      // Restore
+      Object.assign(mockAuthConfig, { isAuthEnabled: false });
+    });
+
+    it('handles incrementUsage error gracefully (lines 178-181)', async () => {
+      Object.assign(mockAuthConfig, { isAuthEnabled: true });
+      mockAuth.mockResolvedValue({ user: { id: 'user-789' } });
+      mockCanRunAnalysis.mockResolvedValue({ allowed: true, tier: 'pro' });
+      mockIncrementUsage.mockRejectedValue(new Error('DB error'));
+
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const mockCreate = jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+      });
+      MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+      const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
+      expect(res.status).toBe(200);
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to increment usage:', expect.any(Error));
+      consoleSpy.mockRestore();
+
+      // Restore
+      Object.assign(mockAuthConfig, { isAuthEnabled: false });
+    });
+
+    it('returns 400 when texts items are not objects with filename and text (line 138)', async () => {
+      const res = await POST(makeRequest({ texts: ['just-a-string'] }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain('filename and text');
+    });
   });
 
   describe('PostHog tracking', () => {

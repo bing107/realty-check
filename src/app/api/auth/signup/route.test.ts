@@ -152,4 +152,22 @@ describe("POST /api/auth/signup", () => {
     const body = await res.json();
     expect(body.error).toMatch(/Failed to create account/);
   });
+
+  it("returns 409 on P2002 unique constraint error (line 52)", async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(null);
+    const p2002Error = new Error("Unique constraint failed") as Error & { code: string };
+    p2002Error.code = "P2002";
+    mockPrisma.user.create.mockRejectedValue(p2002Error);
+
+    const res = await POST(
+      makeRequest({
+        email: "test@example.com",
+        password: "securepass123",
+        name: "Test",
+      })
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toMatch(/already exists/);
+  });
 });

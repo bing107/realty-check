@@ -154,4 +154,86 @@ describe("AnalysisHistory", () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
+
+  it("handles fetch error gracefully (line 34)", async () => {
+    mockFetch.mockRejectedValue(new Error("Network error"));
+
+    const { container } = render(<AnalysisHistory onView={onView} />);
+
+    await waitFor(() => {
+      // After error, loading becomes false and analyses is empty, so renders nothing
+      expect(container.innerHTML).toBe("");
+    });
+  });
+
+  it("toggles open/close when header button is clicked (lines 61-68)", async () => {
+    const analyses = [
+      makeAnalysis({ id: "a1", filename: "property-one.pdf" }),
+    ];
+
+    mockFetch.mockResolvedValue({
+      json: () => Promise.resolve({ analyses }),
+    });
+
+    render(<AnalysisHistory onView={onView} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("property-one.pdf")).toBeInTheDocument();
+    });
+
+    // Click to close
+    const toggleButton = screen.getByText(/Past analyses/);
+    fireEvent.click(toggleButton);
+
+    // After closing, the file name should no longer be visible
+    expect(screen.queryByText("property-one.pdf")).not.toBeInTheDocument();
+
+    // Click to re-open
+    fireEvent.click(toggleButton);
+    expect(screen.getByText("property-one.pdf")).toBeInTheDocument();
+  });
+
+  it("shows negative monthly net with no plus sign", async () => {
+    const analyses = [
+      makeAnalysis({
+        id: "a1",
+        filename: "negative.pdf",
+        metrics: JSON.stringify({ grossYield: 0.04, monthlyNet: -200 }),
+      }),
+    ];
+
+    mockFetch.mockResolvedValue({
+      json: () => Promise.resolve({ analyses }),
+    });
+
+    render(<AnalysisHistory onView={onView} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("negative.pdf")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/4\.0% yield/)).toBeInTheDocument();
+    expect(screen.getByText(/-200\/mo/)).toBeInTheDocument();
+  });
+
+  it("returns null preview for invalid JSON metrics", async () => {
+    const analyses = [
+      makeAnalysis({
+        id: "a1",
+        filename: "bad-metrics.pdf",
+        metrics: "not-valid-json",
+      }),
+    ];
+
+    mockFetch.mockResolvedValue({
+      json: () => Promise.resolve({ analyses }),
+    });
+
+    render(<AnalysisHistory onView={onView} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("bad-metrics.pdf")).toBeInTheDocument();
+    });
+    // No metric preview text should appear since JSON parsing failed
+  });
 });

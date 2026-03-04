@@ -21,9 +21,21 @@ import { getUserUsage } from '@/lib/usage';
 const mockAuth = auth as jest.Mock;
 const mockGetUserUsage = getUserUsage as jest.Mock;
 
+const mockAuthConfig = jest.requireMock('@/lib/auth-config') as { isAuthEnabled: boolean };
+
 describe('GET /api/usage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    Object.assign(mockAuthConfig, { isAuthEnabled: true });
+  });
+
+  it('returns 503 when auth is not enabled (line 8)', async () => {
+    Object.assign(mockAuthConfig, { isAuthEnabled: false });
+
+    const res = await GET();
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error).toBe('Auth not enabled');
   });
 
   it('returns 401 when there is no session', async () => {

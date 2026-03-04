@@ -184,4 +184,14 @@ describe('POST /api/ocr', () => {
     expect(res.status).toBe(200);
     expect(MockAnthropic).toHaveBeenCalledWith({ apiKey: 'env-key-456' });
   });
+
+  it('returns 400 when images array contains non-strings (line 20)', async () => {
+    const res = await POST(makeRequest({
+      images: [123, null],
+      filename: 'scan.pdf',
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/base64 strings/);
+  });
 });

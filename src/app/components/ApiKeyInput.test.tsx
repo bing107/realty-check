@@ -10,13 +10,16 @@ const localStorageMock = (() => {
     setItem: jest.fn((key: string, value: string) => {
       store[key] = value;
     }),
+    removeItem: jest.fn((key: string) => {
+      delete store[key];
+    }),
     clear: () => {
       store = {};
     },
   };
 })();
 
-Object.defineProperty(window, "localStorage", { value: localStorageMock });
+Object.defineProperty(window, "localStorage", { value: localStorageMock, configurable: true });
 
 describe("ApiKeyInput", () => {
   const onChange = jest.fn();
@@ -96,5 +99,15 @@ describe("ApiKeyInput", () => {
       "anthropic_api_key",
       "sk-ant-new-key"
     );
+  });
+
+  it("removes from localStorage when key is cleared (line 26)", () => {
+    render(<ApiKeyInput value="sk-ant-existing" onChange={onChange} />);
+    const input = screen.getByPlaceholderText("sk-ant-...");
+
+    fireEvent.change(input, { target: { value: "" } });
+
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith("anthropic_api_key");
+    expect(onChange).toHaveBeenCalledWith("");
   });
 });

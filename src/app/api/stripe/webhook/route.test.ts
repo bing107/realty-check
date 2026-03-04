@@ -2,15 +2,18 @@
  * @jest-environment node
  */
 
+let mockWebhookStripeEnabled = true;
+const mockStripeObj = {
+  webhooks: { constructEvent: jest.fn() },
+  subscriptions: { retrieve: jest.fn() },
+};
+
 jest.mock('@/lib/stripe', () => ({
-  STRIPE_ENABLED: true,
-  stripe: {
-    webhooks: {
-      constructEvent: jest.fn(),
-    },
-    subscriptions: {
-      retrieve: jest.fn(),
-    },
+  get STRIPE_ENABLED() {
+    return mockWebhookStripeEnabled;
+  },
+  get stripe() {
+    return mockWebhookStripeEnabled ? mockStripeObj : null;
   },
 }));
 
@@ -30,7 +33,6 @@ jest.mock('@/lib/posthog-server', () => ({
 import { POST } from './route';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stripe } from '@/lib/stripe';
 import { serverTrack } from '@/lib/posthog-server';
 
 const mockServerTrack = serverTrack as jest.Mock;
@@ -40,11 +42,6 @@ const mockPrisma = prisma as unknown as {
     findUnique: jest.Mock;
     update: jest.Mock;
   };
-};
-
-const mockStripe = stripe as unknown as {
-  webhooks: { constructEvent: jest.Mock };
-  subscriptions: { retrieve: jest.Mock };
 };
 
 function makeWebhookRequest(body: string, signature: string | null = 'sig_test') {
@@ -64,12 +61,34 @@ describe('POST /api/stripe/webhook', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockWebhookStripeEnabled = true;
     process.env = { ...originalEnv };
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_secret';
   });
 
   afterEach(() => {
     process.env = originalEnv;
+  });
+
+  it('returns 503 when Stripe is not enabled (line 16)', async () => {
+    mockWebhookStripeEnabled = false;
+
+    const req = makeWebhookRequest('{}');
+    const res = await POST(req);
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error).toBe('Stripe not configured');
+  });
+
+  it('returns 503 when webhook secret is not configured (line 21)', async () => {
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+
+    const req = makeWebhookRequest('{}');
+    const res = await POST(req);
+    expect(res.status).toBe(503);
+
+    const body = await res.json();
+    expect(body.error).toBe('Webhook secret not configured');
   });
 
   it('returns 400 when stripe-signature header is missing', async () => {
@@ -82,7 +101,7 @@ describe('POST /api/stripe/webhook', () => {
   });
 
   it('returns 400 when webhook signature verification fails', async () => {
-    mockStripe.webhooks.constructEvent.mockImplementation(() => {
+    mockStripeObj.webhooks.constructEvent.mockImplementation(() => {
       throw new Error('Invalid signature');
     });
 
@@ -107,8 +126,8 @@ describe('POST /api/stripe/webhook', () => {
       },
     };
 
-    mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
-    mockStripe.subscriptions.retrieve.mockResolvedValue({
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
+    mockStripeObj.subscriptions.retrieve.mockResolvedValue({
       items: {
         data: [{ current_period_end: 1735689600 }],
       },
@@ -147,8 +166,8 @@ describe('POST /api/stripe/webhook', () => {
       },
     };
 
-    mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
-    mockStripe.subscriptions.retrieve.mockResolvedValue({
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
+    mockStripeObj.subscriptions.retrieve.mockResolvedValue({
       items: {
         data: [{ current_period_end: 1735689600 }],
       },
@@ -190,7 +209,7 @@ describe('POST /api/stripe/webhook', () => {
       },
     };
 
-    mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
 
     const req = makeWebhookRequest(JSON.stringify(mockEvent));
     const res = await POST(req);
@@ -210,7 +229,7 @@ describe('POST /api/stripe/webhook', () => {
       },
     };
 
-    mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
     mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: 'user-1',
       stripeSubscriptionId: 'sub_to_delete',
@@ -246,7 +265,7 @@ describe('POST /api/stripe/webhook', () => {
       },
     };
 
-    mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
     mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: 'user-1',
       stripeCustomerId: 'cus_123',
@@ -281,7 +300,7 @@ describe('POST /api/stripe/webhook', () => {
       },
     };
 
-    mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
     mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: 'user-1',
       stripeCustomerId: 'cus_123',
@@ -301,15 +320,59 @@ describe('POST /api/stripe/webhook', () => {
     });
   });
 
-  it('returns 503 when webhook secret is not configured', async () => {
-    delete process.env.STRIPE_WEBHOOK_SECRET;
+  it('handles customer.subscription.updated finding user by subscriptionId fallback (line 106)', async () => {
+    const mockEvent = {
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_fallback',
+          customer: 'cus_unknown',
+          status: 'active',
+          items: {
+            data: [{ current_period_end: 1738368000 }],
+          },
+        },
+      },
+    };
 
-    const req = makeWebhookRequest('{}');
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
+    // First lookup by stripeCustomerId returns null
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    // Second lookup by stripeSubscriptionId returns user
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
+      id: 'user-fallback',
+      stripeSubscriptionId: 'sub_fallback',
+    });
+    mockPrisma.user.update.mockResolvedValue({});
+
+    const req = makeWebhookRequest(JSON.stringify(mockEvent));
     const res = await POST(req);
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
+
+    expect(mockPrisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-fallback' },
+      data: {
+        tier: 'pro',
+        stripeCurrentPeriodEnd: new Date(1738368000 * 1000),
+      },
+    });
+  });
+
+  it('handles unrecognized event type without error', async () => {
+    const mockEvent = {
+      type: 'invoice.payment_succeeded',
+      data: { object: {} },
+    };
+
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
+
+    const req = makeWebhookRequest(JSON.stringify(mockEvent));
+    const res = await POST(req);
+    expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body.error).toBe('Webhook secret not configured');
+    expect(body.received).toBe(true);
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
   });
 
   it('gracefully handles when no user is found for checkout.session.completed', async () => {
@@ -325,8 +388,8 @@ describe('POST /api/stripe/webhook', () => {
       },
     };
 
-    mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
-    mockStripe.subscriptions.retrieve.mockResolvedValue({
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
+    mockStripeObj.subscriptions.retrieve.mockResolvedValue({
       items: { data: [{ current_period_end: 1735689600 }] },
     });
     mockPrisma.user.findUnique.mockResolvedValue(null);
@@ -355,8 +418,8 @@ describe('POST /api/stripe/webhook', () => {
         },
       };
 
-      mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
-      mockStripe.subscriptions.retrieve.mockResolvedValue({
+      mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
+      mockStripeObj.subscriptions.retrieve.mockResolvedValue({
         items: { data: [{ current_period_end: 1735689600 }] },
       });
       mockPrisma.user.findUnique.mockResolvedValueOnce({
@@ -387,7 +450,7 @@ describe('POST /api/stripe/webhook', () => {
         },
       };
 
-      mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
+      mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
       mockPrisma.user.findUnique.mockResolvedValueOnce({
         id: 'user-1',
         stripeSubscriptionId: 'sub_to_delete',
@@ -417,8 +480,8 @@ describe('POST /api/stripe/webhook', () => {
         },
       };
 
-      mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
-      mockStripe.subscriptions.retrieve.mockResolvedValue({
+      mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
+      mockStripeObj.subscriptions.retrieve.mockResolvedValue({
         items: { data: [{ current_period_end: 1735689600 }] },
       });
       mockPrisma.user.findUnique.mockResolvedValue(null);
@@ -431,7 +494,7 @@ describe('POST /api/stripe/webhook', () => {
     });
 
     it('does not call serverTrack when signature verification fails', async () => {
-      mockStripe.webhooks.constructEvent.mockImplementation(() => {
+      mockStripeObj.webhooks.constructEvent.mockImplementation(() => {
         throw new Error('Invalid signature');
       });
 

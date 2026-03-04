@@ -61,4 +61,22 @@ describe('posthog-server', () => {
       properties: {},
     });
   });
+
+  it('reuses existing client on second call (line 7 branch)', async () => {
+    process.env.POSTHOG_API_KEY = 'phx_test_key';
+
+    const { serverTrack } = await import('@/lib/posthog-server');
+
+    // First call creates client
+    await serverTrack('user-1', 'first_event');
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+
+    // Second call reuses client (line 7: if (!_client) won't create new)
+    await serverTrack('user-1', 'second_event');
+    expect(mockCapture).toHaveBeenCalledTimes(2);
+
+    // PostHog constructor should only be called once
+    const { PostHog } = require('posthog-node');
+    expect(PostHog).toHaveBeenCalledTimes(1);
+  });
 });

@@ -237,6 +237,39 @@ describe('extractTextFromPdf', () => {
     expect(mockToDataURL).toHaveBeenCalledWith('image/jpeg', 0.6);
   });
 
+  it('handles items without "str" property (line 28 branch)', async () => {
+    // Set up a page that has text content items without "str" property
+    mockPdf.numPages = 1;
+    mockGetDocument.mockReturnValue({
+      promise: Promise.resolve(mockPdf),
+    });
+    mockGetPage.mockImplementation(() => {
+      return Promise.resolve({
+        getTextContent: jest.fn().mockResolvedValue({
+          items: [
+            { str: 'Normal text' },
+            { height: 12 }, // item without "str" property
+          ],
+        }),
+        getViewport: mockGetViewport.mockReturnValue({ width: 1000, height: 1400 }),
+        render: mockRender.mockReturnValue({ promise: Promise.resolve() }),
+      });
+    });
+
+    const result = await extractTextFromPdf(makeFile('mixed-items.pdf'));
+    expect(result.text).toBe('Normal text');
+    expect(result.isScanned).toBeUndefined(); // has text, so not scanned
+  });
+
+  it('throws when canvas.getContext returns null (line 57)', async () => {
+    setupScannedPdf(1);
+    mockGetContext.mockReturnValue(null);
+
+    await expect(extractTextFromPdf(makeFile('no-context.pdf'))).rejects.toThrow(
+      'Failed to get 2D canvas context for page 1'
+    );
+  });
+
   it('returns text with only whitespace as scanned (after trim)', async () => {
     // Pages that produce only spaces/whitespace
     mockPdf.numPages = 2;

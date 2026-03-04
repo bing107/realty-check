@@ -97,6 +97,39 @@ describe('POST /api/stripe/checkout', () => {
     expect(res.status).toBe(401);
   });
 
+  it('returns 401 when session has no user id (line 26)', async () => {
+    mockAuth.mockResolvedValue({ user: { email: 'no-id@test.com' } });
+
+    const res = await POST();
+    expect(res.status).toBe(401);
+  });
+
+  it('uses VERCEL_URL as base when NEXTAUTH_URL is not set (lines 41-42)', async () => {
+    delete process.env.NEXTAUTH_URL;
+    process.env.VERCEL_URL = 'my-app.vercel.app';
+
+    mockAuth.mockResolvedValue({
+      user: { id: 'user-1', email: 'test@example.com' },
+    });
+    mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+      stripeCustomerId: 'cus_existing',
+      email: 'test@example.com',
+    });
+    mockStripeObj.checkout.sessions.create.mockResolvedValue({
+      url: 'https://checkout.stripe.com/session_test',
+    });
+
+    const res = await POST();
+    expect(res.status).toBe(200);
+
+    expect(mockStripeObj.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success_url: 'https://my-app.vercel.app/analyze?checkout=success',
+        cancel_url: 'https://my-app.vercel.app/pricing',
+      })
+    );
+  });
+
   it('creates a new Stripe customer when user has no stripeCustomerId', async () => {
     mockAuth.mockResolvedValue({
       user: { id: 'user-1', email: 'test@example.com' },
