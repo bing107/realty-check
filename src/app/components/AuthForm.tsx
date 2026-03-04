@@ -12,7 +12,11 @@ interface AuthFormProps {
 function AuthFormInner({ mode }: AuthFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/analyze";
+  const rawCallbackUrl = searchParams.get("callbackUrl") || "/analyze";
+  const callbackUrl =
+    rawCallbackUrl.startsWith("/") && !rawCallbackUrl.startsWith("//")
+      ? rawCallbackUrl
+      : "/analyze";
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

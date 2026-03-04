@@ -12,45 +12,13 @@ import UpgradePrompt from "@/app/components/UpgradePrompt";
 import WizardStepIndicator from "@/app/components/WizardStepIndicator";
 import type { PriceComparison } from "@/app/components/ResultsDashboard";
 import type { CalculatedMetrics } from "@/lib/calculator";
+import type { AnalysisResult } from "@/lib/types";
 import { extractTextFromPdf, type ExtractResult } from "@/lib/pdf-extract";
 import { AUTH_ENABLED } from "@/lib/auth-config";
 
 interface ExtractError {
   filename: string;
   error: string;
-}
-
-interface AnalysisResult {
-  property: {
-    address: string | null;
-    sqm: number | null;
-    units: number | null;
-    yearBuilt: number | null;
-    type: "ETW" | "MFH" | "other" | null;
-  };
-  financials: {
-    purchasePrice: number | null;
-    hausgeld: number | null;
-    ruecklage: number | null;
-    currentRent: number | null;
-    expectedRent: number | null;
-    grunderwerbsteuer: number | null;
-    notarFees: number | null;
-    maklerFees: number | null;
-  };
-  protocols: {
-    upcomingRenovations: string[];
-    sonderumlagen: string[];
-    maintenanceBacklog: string[];
-    disputes: string[];
-  };
-  wirtschaftsplan: {
-    annualBudget: number | null;
-    reserveFundStatus: string | null;
-    plannedMajorWorks: string[];
-  };
-  redFlags: string[];
-  summary: string;
 }
 
 function formatEur(value: number | null): string {
@@ -216,9 +184,11 @@ function AnalyzeWizard() {
         const calcData = await calcRes.json();
         if (calcRes.ok) {
           setMetrics(calcData.metrics);
+        } else {
+          setAnalyzeError("Financial metrics calculation failed. You can retry the analysis.");
         }
       } catch {
-        // Calculator failure is non-fatal
+        setAnalyzeError("Financial metrics calculation failed. You can retry the analysis.");
       }
     } catch {
       setAnalyzeError("Failed to analyze documents. Please try again.");

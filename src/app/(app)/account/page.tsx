@@ -24,14 +24,21 @@ function AccountContent() {
       .catch(() => {});
   }, []);
 
+  const [portalError, setPortalError] = useState<string | null>(null);
+
   async function handleManageSubscription() {
     setPortalLoading(true);
+    setPortalError(null);
     try {
       const res = await fetch("/api/stripe/portal", { method: "POST" });
       const data = await res.json();
+      if (!res.ok) {
+        setPortalError(data.error || "Failed to open subscription portal");
+        return;
+      }
       if (data.url) window.location.href = data.url;
     } catch {
-      // ignore
+      setPortalError("Failed to connect to subscription portal");
     } finally {
       setPortalLoading(false);
     }
@@ -81,6 +88,9 @@ function AccountContent() {
           {STRIPE_ENABLED && (
             <div className="bg-white rounded-2xl shadow-sm p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Subscription</h2>
+              {portalError && (
+                <p className="text-sm text-red-600 mb-3">{portalError}</p>
+              )}
               <button
                 onClick={handleManageSubscription}
                 disabled={portalLoading}
