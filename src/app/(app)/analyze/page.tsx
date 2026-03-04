@@ -15,6 +15,7 @@ import type { CalculatedMetrics } from "@/lib/calculator";
 import type { AnalysisResult } from "@/lib/types";
 import { extractTextFromPdf, type ExtractResult } from "@/lib/pdf-extract";
 import { AUTH_ENABLED } from "@/lib/auth-config";
+import { track } from "@/lib/analytics";
 
 interface ExtractError {
   filename: string;
@@ -57,6 +58,9 @@ function AnalyzeWizard() {
 
   const handleFilesChange = useCallback((files: File[]) => {
     setPdfFiles(files);
+    if (files.length > 0) {
+      track('files_uploaded', { file_count: files.length, total_size_mb: Math.round(files.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024 * 100) / 100 });
+    }
   }, []);
 
   // Derive wizard step
@@ -77,6 +81,8 @@ function AnalyzeWizard() {
   }
 
   async function handleAnalyze() {
+    const extractStartTime = Date.now();
+    track('extraction_started', { file_count: pdfFiles.length });
     setExtracting(true);
     setFetchError(null);
     setExtractErrors([]);
@@ -141,6 +147,7 @@ function AnalyzeWizard() {
         }
       }
 
+      track('extraction_completed', { file_count: results.length + errors.length, ocr_count: results.filter(r => r.isScanned).length, error_count: errors.length, duration_ms: Date.now() - extractStartTime });
       setExtractResults(results);
       setExtractErrors(errors);
     } catch {
@@ -160,6 +167,8 @@ function AnalyzeWizard() {
         .filter((r) => r.text && (!r.isScanned || r.ocrApplied))
         .map((r) => ({ filename: r.filename, text: r.text }));
 
+      const analysisStartTime = Date.now();
+      track('ai_analysis_started', { auth_method: apiKey ? 'byok' : session ? 'platform' : 'none' });
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
@@ -168,6 +177,7 @@ function AnalyzeWizard() {
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 403 && data.error === "limit_reached") {
+          track('upgrade_prompt_shown', { current_tier: data.tier ?? 'free' });
           setShowUpgradePrompt(true);
           return;
         }
@@ -175,6 +185,7 @@ function AnalyzeWizard() {
         return;
       }
       setAnalysis(data.analysis);
+      track('ai_analysis_completed', { duration_ms: Date.now() - analysisStartTime, has_red_flags: (data.analysis?.redFlags?.length ?? 0) > 0 });
 
       // Auto-call calculate after analysis succeeds
       try {
@@ -204,6 +215,7 @@ function AnalyzeWizard() {
     setSummaryLoading(true);
     setSummaryError(null);
     try {
+      const reportStartTime = Date.now();
       const res = await fetch("/api/summary", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
@@ -215,6 +227,7 @@ function AnalyzeWizard() {
         return;
       }
       setInvestmentSummary(data.investmentSummary);
+      track('report_generated', { duration_ms: Date.now() - reportStartTime });
       setPriceComparison(data.priceComparison ?? null);
 
       // Auto-save for logged-in users

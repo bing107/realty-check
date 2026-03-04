@@ -4,6 +4,7 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+import { track } from "@/lib/analytics";
 
 interface AuthFormProps {
   mode: "signin" | "signup";
@@ -37,6 +38,7 @@ function AuthFormInner({ mode }: AuthFormProps) {
     if (result?.error) {
       setError("Invalid email or password");
     } else {
+      track('login_completed', { method: 'credentials' });
       router.push(callbackUrl);
     }
   }
@@ -66,6 +68,7 @@ function AuthFormInner({ mode }: AuthFormProps) {
       if (result?.error) {
         setError("Account created. Please sign in.");
       } else {
+        track('signup_completed');
         router.push(callbackUrl);
       }
     } catch {

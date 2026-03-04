@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { stripe, STRIPE_ENABLED } from '@/lib/stripe';
 import { prisma } from '@/lib/prisma';
+import { serverTrack } from '@/lib/posthog-server';
 
 export async function POST() {
   if (!STRIPE_ENABLED || !stripe) {
@@ -47,6 +48,11 @@ export async function POST() {
     success_url: `${baseUrl}/analyze?checkout=success`,
     cancel_url: `${baseUrl}/pricing`,
   });
+
+  await serverTrack(session.user.id, 'stripe_checkout_started', {
+    user_id: session.user.id,
+    target_tier: 'pro',
+  }).catch(() => {});
 
   return NextResponse.json({ url: checkoutSession.url });
 }

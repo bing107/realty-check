@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe, STRIPE_ENABLED } from '@/lib/stripe';
 import { prisma } from '@/lib/prisma';
 import type Stripe from 'stripe';
+import { serverTrack } from '@/lib/posthog-server';
 
 /**
  * In Stripe API 2025-01-27.acacia (SDK v17+), current_period_end moved
@@ -81,6 +82,11 @@ export async function POST(req: NextRequest) {
             stripeCurrentPeriodEnd: periodEnd,
           },
         });
+        await serverTrack(user.id, 'subscription_created', {
+          user_id: user.id,
+          tier: 'pro',
+          price: session.amount_total ? session.amount_total / 100 : null,
+        }).catch(() => {});
       }
       break;
     }
@@ -132,6 +138,10 @@ export async function POST(req: NextRequest) {
             stripeCurrentPeriodEnd: null,
           },
         });
+        await serverTrack(user.id, 'subscription_cancelled', {
+          user_id: user.id,
+          tier: 'free',
+        }).catch(() => {});
       }
       break;
     }
