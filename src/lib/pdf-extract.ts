@@ -49,7 +49,7 @@ export async function extractTextFromPdf(file: File): Promise<ExtractResult> {
     canvas.height = scaledViewport.height;
     const ctx = canvas.getContext("2d")!;
 
-    await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
+    await page.render({ canvasContext: ctx, viewport: scaledViewport, canvas }).promise;
     images.push(canvas.toDataURL("image/jpeg", 0.85));
   }
 
