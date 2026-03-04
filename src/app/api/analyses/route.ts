@@ -31,18 +31,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { filename, analysisJson, metrics, summary } = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body?.analysisJson) {
+    return NextResponse.json(
+      { error: "analysisJson is required" },
+      { status: 400 }
+    );
+  }
 
-  const analysis = await prisma.analysis.create({
-    data: {
-      userId: session.user.id,
-      filename: filename ?? null,
-      analysisJson: JSON.stringify(analysisJson),
-      metrics: metrics ? JSON.stringify(metrics) : null,
-      summary: summary ? JSON.stringify(summary) : null,
-    },
-    select: { id: true, createdAt: true },
-  });
+  const { filename, analysisJson, metrics, summary } = body;
 
-  return NextResponse.json(analysis, { status: 201 });
+  try {
+    const analysis = await prisma.analysis.create({
+      data: {
+        userId: session.user.id,
+        filename: filename ?? null,
+        analysisJson: JSON.stringify(analysisJson),
+        metrics: metrics ? JSON.stringify(metrics) : null,
+        summary: summary ? JSON.stringify(summary) : null,
+      },
+      select: { id: true, createdAt: true },
+    });
+
+    return NextResponse.json(analysis, { status: 201 });
+  } catch {
+    return NextResponse.json(
+      { error: "Failed to save analysis" },
+      { status: 500 }
+    );
+  }
 }

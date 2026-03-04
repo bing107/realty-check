@@ -11,8 +11,7 @@ import AnalysisHistory from "./components/AnalysisHistory";
 import type { PriceComparison } from "./components/ResultsDashboard";
 import type { CalculatedMetrics } from "@/lib/calculator";
 import { extractTextFromPdf, type ExtractResult } from "@/lib/pdf-extract";
-
-const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
+import { AUTH_ENABLED } from "@/lib/auth-config";
 
 interface ExtractError {
   filename: string;
