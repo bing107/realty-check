@@ -20,7 +20,7 @@
     "next": "^15.1.0",
     "next-auth": "^5.0.0-beta.30",
     "pdf-parse": "^1.1.1",
-    "pdfjs-dist": "^5.5.207",
+    "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-dropzone": "^14.3.5",
