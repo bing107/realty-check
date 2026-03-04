@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { auth } from '@/auth';
 import { isAuthEnabled } from '@/lib/auth-config';
 import { canRunAnalysis, incrementUsage } from '@/lib/usage';
+import { serverTrack } from '@/lib/posthog-server';
 
 const SYSTEM_PROMPT = `You are an expert German real estate investment analyst. You analyze documents related to property purchases (Exposés, Teilungserklärungen, Protokolle, Wirtschaftspläne, etc.) and extract structured financial and risk data.
 
@@ -109,8 +110,9 @@ export async function POST(req: NextRequest) {
 
   // Usage check: if not BYOK and auth is enabled, enforce limits
   let sessionUserId: string | undefined;
+  let session: Awaited<ReturnType<typeof auth>> | null = null;
   if (!isByok && isAuthEnabled) {
-    const session = await auth();
+    session = await auth();
     if (session?.user?.id) {
       sessionUserId = session.user.id;
       const usageCheck = await canRunAnalysis(session.user.id, false);
@@ -176,6 +178,14 @@ export async function POST(req: NextRequest) {
       console.error("Failed to increment usage:", err);
     }
   }
+
+  // Track analysis consumption
+  const trackDistinctId = sessionUserId ?? 'anonymous';
+  await serverTrack(trackDistinctId, 'analysis_consumed', {
+    user_id: sessionUserId ?? null,
+    tier: session?.user?.tier ?? null,
+    is_byok: isByok,
+  }).catch(() => {}); // don't fail the request if tracking fails
 
   return NextResponse.json({ analysis });
 }
