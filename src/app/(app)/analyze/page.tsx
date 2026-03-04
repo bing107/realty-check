@@ -46,6 +46,7 @@ function AnalyzeWizard() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
   const [metrics, setMetrics] = useState<CalculatedMetrics | null>(null);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
   const [investmentSummary, setInvestmentSummary] = useState<string | null>(null);
   const [priceComparison, setPriceComparison] = useState<PriceComparison | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -153,6 +154,7 @@ function AnalyzeWizard() {
     if (!extractResults) return;
     setAnalyzeLoading(true);
     setAnalyzeError(null);
+    setMetricsError(null);
     try {
       const texts = extractResults
         .filter((r) => r.text && (!r.isScanned || r.ocrApplied))
@@ -185,10 +187,10 @@ function AnalyzeWizard() {
         if (calcRes.ok) {
           setMetrics(calcData.metrics);
         } else {
-          setAnalyzeError("Financial metrics calculation failed. You can retry the analysis.");
+          setMetricsError("Financial metrics calculation failed. The AI analysis above is still valid.");
         }
       } catch {
-        setAnalyzeError("Financial metrics calculation failed. You can retry the analysis.");
+        setMetricsError("Financial metrics calculation failed. The AI analysis above is still valid.");
       }
     } catch {
       setAnalyzeError("Failed to analyze documents. Please try again.");
@@ -239,7 +241,7 @@ function AnalyzeWizard() {
     }
   }
 
-  const canAnalyze = pdfFiles.length > 0 && !extracting;
+  const canAnalyze = pdfFiles.length > 0 && !extracting && !analyzeLoading && !summaryLoading;
   const hasUsableExtracts =
     extractResults !== null &&
     extractResults.some((r) => r.text && (!r.isScanned || r.ocrApplied));
@@ -365,6 +367,12 @@ function AnalyzeWizard() {
         {analyzeError && (
           <div className="mt-8 bg-red-50 border border-red-200 rounded-xl p-4">
             <p className="text-red-700">{analyzeError}</p>
+          </div>
+        )}
+
+        {metricsError && (
+          <div className="mt-8 bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <p className="text-amber-700">{metricsError}</p>
           </div>
         )}
 
