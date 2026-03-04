@@ -44,8 +44,8 @@ export async function POST() {
     customer: customerId,
     mode: 'subscription',
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${baseUrl}/?checkout=success`,
-    cancel_url: `${baseUrl}/`,
+    success_url: `${baseUrl}/analyze?checkout=success`,
+    cancel_url: `${baseUrl}/pricing`,
   });
 
   return NextResponse.json({ url: checkoutSession.url });

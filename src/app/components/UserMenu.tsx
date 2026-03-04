@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 import Image from "next/image";
+import Link from "next/link";
 
 interface UserMenuProps {
   user: {
@@ -64,6 +65,20 @@ export default function UserMenu({ user }: UserMenuProps) {
               </p>
               <p className="text-xs text-gray-500 truncate">{user.email}</p>
             </div>
+            <Link
+              href="/history"
+              onClick={() => setOpen(false)}
+              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              My Analyses
+            </Link>
+            <Link
+              href="/account"
+              onClick={() => setOpen(false)}
+              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Account
+            </Link>
             <button
               onClick={() => signOut()}
               className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
