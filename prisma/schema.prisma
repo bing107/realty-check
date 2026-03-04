@@ -8,16 +8,22 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  createdAt     DateTime  @default(now())
-  accounts      Account[]
-  sessions      Session[]
-  analyses      Analysis[]
+  id                     String    @id @default(cuid())
+  name                   String?
+  email                  String    @unique
+  emailVerified          DateTime?
+  image                  String?
+  password               String?
+  createdAt              DateTime  @default(now())
+  tier                   String    @default("free")
+  stripeCustomerId       String?   @unique
+  stripeSubscriptionId   String?   @unique
+  stripeCurrentPeriodEnd DateTime?
+  analysisCount          Int       @default(0)
+  analysisPeriodStart    DateTime  @default(now())
+  accounts               Account[]
+  sessions               Session[]
+  analyses               Analysis[]
 }
 
 model Account {
