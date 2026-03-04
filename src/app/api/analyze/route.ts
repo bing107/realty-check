@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
 
   // Usage check: if not BYOK and auth is enabled, enforce limits
   let sessionUserId: string | undefined;
+  let sessionTier: string | null = null;
   let session: Session | null = null;
   if (!isByok && isAuthEnabled) {
     session = await auth();
@@ -128,6 +129,7 @@ export async function POST(req: NextRequest) {
           { status: 403 }
         );
       }
+      sessionTier = usageCheck.tier ?? null;
     }
   }
 
@@ -184,7 +186,7 @@ export async function POST(req: NextRequest) {
   const trackDistinctId = sessionUserId ?? 'anonymous';
   await serverTrack(trackDistinctId, 'analysis_consumed', {
     user_id: sessionUserId ?? null,
-    tier: null,
+    tier: sessionTier,
     is_byok: isByok,
   }).catch(() => {}); // don't fail the request if tracking fails
 

@@ -30,7 +30,7 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? 'https://eu.i.posthog.com',
       capture_pageview: false,
       capture_pageleave: true,
-      autocapture: true,
+      autocapture: false,
       respect_dnt: true,
     });
   }, []);
