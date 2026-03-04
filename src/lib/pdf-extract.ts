@@ -2,6 +2,9 @@ export interface ExtractResult {
   filename: string;
   pages: number;
   text: string;
+  isScanned?: boolean;
+  ocrApplied?: boolean;
+  images?: string[]; // base64 data URLs of rendered page images
 }
 
 export async function extractTextFromPdf(file: File): Promise<ExtractResult> {
@@ -24,11 +27,39 @@ export async function extractTextFromPdf(file: File): Promise<ExtractResult> {
 
   const text = textParts.join("\n").trim();
 
+  if (text) {
+    return {
+      filename: file.name,
+      pages: pdf.numPages,
+      text,
+    };
+  }
+
+  // Scanned PDF: render pages to images for OCR
+  const maxPages = Math.min(pdf.numPages, 15);
+  const images: string[] = [];
+
+  for (let i = 1; i <= maxPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1 });
+    const scale = 1500 / viewport.width;
+    const scaledViewport = page.getViewport({ scale });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = scaledViewport.width;
+    canvas.height = scaledViewport.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Failed to get 2D canvas context for page " + i);
+
+    await page.render({ canvasContext: ctx, viewport: scaledViewport, canvas }).promise;
+    images.push(canvas.toDataURL("image/jpeg", 0.85));
+  }
+
   return {
     filename: file.name,
     pages: pdf.numPages,
-    text:
-      text ||
-      "OCR not supported: this appears to be a scanned PDF with no extractable text.",
+    text: "OCR not supported: this appears to be a scanned PDF with no extractable text.",
+    isScanned: true,
+    images,
   };
 }

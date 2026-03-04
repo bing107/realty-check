@@ -143,6 +143,40 @@ export default function Home() {
         }
       }
 
+      // OCR scanned documents
+      for (const result of results) {
+        if (result.isScanned && result.images && result.images.length > 0) {
+          try {
+            const ocrRes = await fetch("/api/ocr", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": apiKey,
+              },
+              body: JSON.stringify({
+                images: result.images,
+                filename: result.filename,
+              }),
+            });
+            const ocrData = await ocrRes.json();
+            if (ocrRes.ok) {
+              result.text = ocrData.text;
+              result.ocrApplied = true;
+            } else {
+              errors.push({
+                filename: result.filename,
+                error: "OCR failed: " + ocrData.error,
+              });
+            }
+          } catch {
+            errors.push({
+              filename: result.filename,
+              error: "OCR failed: network error",
+            });
+          }
+        }
+      }
+
       setExtractResults(results);
       setExtractErrors(errors);
     } catch {
@@ -158,7 +192,7 @@ export default function Home() {
     setAnalyzeError(null);
     try {
       const texts = extractResults
-        .filter((r) => r.text && !r.text.startsWith("OCR not supported"))
+        .filter((r) => r.text && (!r.isScanned || r.ocrApplied))
         .map((r) => ({ filename: r.filename, text: r.text }));
 
       const res = await fetch("/api/analyze", {
@@ -247,7 +281,7 @@ export default function Home() {
   const hasUsableExtracts =
     extractResults !== null &&
     extractResults.some(
-      (r) => r.text && !r.text.startsWith("OCR not supported")
+      (r) => r.text && (!r.isScanned || r.ocrApplied)
     );
   const canRunAi = hasUsableExtracts && !analyzeLoading;
 
@@ -366,6 +400,11 @@ export default function Home() {
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-medium text-gray-800">
                       {result.filename}
+                      {result.isScanned && result.ocrApplied && (
+                          <span className="ml-2 text-xs font-semibold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                            OCR
+                          </span>
+                        )}
                     </h3>
                     <span className="text-sm text-gray-500">
                       {result.pages} page{result.pages !== 1 ? "s" : ""}
