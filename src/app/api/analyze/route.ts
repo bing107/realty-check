@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { auth } from '@/auth';
+import { isAuthEnabled } from '@/lib/auth-config';
+import { canRunAnalysis, incrementUsage } from '@/lib/usage';
 
 const SYSTEM_PROMPT = `You are an expert German real estate investment analyst. You analyze documents related to property purchases (Exposés, Teilungserklärungen, Protokolle, Wirtschaftspläne, etc.) and extract structured financial and risk data.
 
@@ -94,12 +97,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'texts array required' }, { status: 400 });
   }
 
-  const apiKey = req.headers.get('x-api-key') || process.env.ANTHROPIC_API_KEY;
+  const byokKey = req.headers.get('x-api-key');
+  const isByok = !!byokKey;
+  const apiKey = byokKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
       { error: 'API key required. Provide your Anthropic key via the X-API-Key header.' },
       { status: 401 }
     );
+  }
+
+  // Usage check: if not BYOK and auth is enabled, enforce limits
+  let sessionUserId: string | undefined;
+  if (!isByok && isAuthEnabled) {
+    const session = await auth();
+    if (session?.user?.id) {
+      sessionUserId = session.user.id;
+      const usageCheck = await canRunAnalysis(session.user.id, false);
+      if (!usageCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: 'limit_reached',
+            tier: usageCheck.tier,
+            used: usageCheck.used,
+            limit: usageCheck.limit,
+          },
+          { status: 403 }
+        );
+      }
+    }
   }
 
   const texts: DocumentText[] = body.texts;
@@ -140,6 +166,15 @@ export async function POST(req: NextRequest) {
       { error: 'Failed to parse Claude response as JSON', raw: content.text },
       { status: 500 }
     );
+  }
+
+  // Increment usage for authenticated non-BYOK users after successful analysis
+  if (sessionUserId && !isByok) {
+    try {
+      await incrementUsage(sessionUserId);
+    } catch (err) {
+      console.error("Failed to increment usage:", err);
+    }
   }
 
   return NextResponse.json({ analysis });

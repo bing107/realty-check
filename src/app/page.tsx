@@ -2,12 +2,15 @@
 
 import { useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import UploadZone from "./components/UploadZone";
 import ApiKeyInput from "./components/ApiKeyInput";
 import ResultsDashboard from "./components/ResultsDashboard";
 import AuthModal from "./components/AuthModal";
 import UserMenu from "./components/UserMenu";
 import AnalysisHistory from "./components/AnalysisHistory";
+import UsageDisplay from "./components/UsageDisplay";
+import UpgradePrompt from "./components/UpgradePrompt";
 import type { PriceComparison } from "./components/ResultsDashboard";
 import type { CalculatedMetrics } from "@/lib/calculator";
 import { extractTextFromPdf, type ExtractResult } from "@/lib/pdf-extract";
@@ -95,6 +98,7 @@ export default function Home() {
     "signin" | "signup" | null
   >(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
   const handleFilesChange = useCallback((files: File[]) => {
     setPdfFiles(files);
@@ -164,6 +168,10 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 403 && data.error === "limit_reached") {
+          setShowUpgradePrompt(true);
+          return;
+        }
         setAnalyzeError(data.error || "Analysis failed");
         return;
       }
@@ -255,6 +263,12 @@ export default function Home() {
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
             <span className="font-semibold text-gray-800">Realty Check</span>
             <div className="flex items-center gap-3">
+              <Link
+                href="/pricing"
+                className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+              >
+                Pricing
+              </Link>
               {session?.user ? (
                 <UserMenu user={session.user} />
               ) : (
@@ -296,6 +310,9 @@ export default function Home() {
 
           <div className="bg-white rounded-2xl shadow-sm p-8">
             <ApiKeyInput value={apiKey} onChange={setApiKey} />
+            {AUTH_ENABLED && session?.user && (
+              <UsageDisplay apiKey={apiKey} />
+            )}
             <UploadZone onFilesChange={handleFilesChange} />
 
             <button
@@ -632,6 +649,10 @@ export default function Home() {
             onClose={() => setShowAuthModal(null)}
             defaultTab={showAuthModal}
           />
+        )}
+
+        {showUpgradePrompt && (
+          <UpgradePrompt onClose={() => setShowUpgradePrompt(false)} />
         )}
       </main>
     </>
