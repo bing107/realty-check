@@ -51,7 +51,7 @@ export async function extractTextFromPdf(file: File): Promise<ExtractResult> {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Failed to get 2D canvas context for page " + i);
 
-    await page.render({ canvasContext: ctx, viewport: scaledViewport, canvas }).promise;
+    await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
     images.push(canvas.toDataURL("image/jpeg", 0.85));
   }
 
