@@ -162,4 +162,44 @@ describe("AccountPage", () => {
       expect(screen.getByText("Failed to connect to subscription portal")).toBeInTheDocument();
     });
   });
+
+  it("shows unlimited when usage limit is null", async () => {
+    mockFetch.mockResolvedValue({
+      json: () => Promise.resolve({ tier: "mentoring", used: 10, limit: null }),
+    });
+
+    render(<AccountPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("10 / unlimited")).toBeInTheDocument();
+    });
+  });
+
+  it("shows em-dash when user has no name or email", async () => {
+    mockUseSession.mockReturnValue({
+      data: { user: { id: "1" } },
+      status: "authenticated",
+    });
+    mockFetch.mockResolvedValue({
+      json: () => Promise.resolve({ tier: "free", used: 0, limit: 1 }),
+    });
+
+    render(<AccountPage />);
+
+    await waitFor(() => {
+      const emDashes = screen.getAllByText("\u2014");
+      expect(emDashes.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("handles fetch error for usage gracefully", async () => {
+    mockFetch.mockRejectedValue(new Error("Failed to fetch"));
+
+    render(<AccountPage />);
+
+    await waitFor(() => {
+      // Usage section should not be rendered
+      expect(screen.queryByText("Usage")).not.toBeInTheDocument();
+    });
+  });
 });

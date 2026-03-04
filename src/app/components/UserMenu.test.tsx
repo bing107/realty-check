@@ -112,4 +112,20 @@ describe("UserMenu", () => {
     const accountLink = screen.getByText("Account");
     expect(accountLink.closest("a")).toHaveAttribute("href", "/account");
   });
+
+  it("clicking 'My Analyses' link closes the menu", () => {
+    render(<UserMenu user={{ name: "John", email: "john@test.com" }} />);
+    fireEvent.click(screen.getByLabelText("User menu"));
+    expect(screen.getByText("My Analyses")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("My Analyses"));
+    expect(screen.queryByText("My Analyses")).not.toBeInTheDocument();
+  });
+
+  it("clicking 'Account' link closes the menu", () => {
+    render(<UserMenu user={{ name: "John", email: "john@test.com" }} />);
+    fireEvent.click(screen.getByLabelText("User menu"));
+    expect(screen.getByText("Account")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Account"));
+    expect(screen.queryByText("Account")).not.toBeInTheDocument();
+  });
 });

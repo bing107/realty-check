@@ -5,9 +5,10 @@ import AuthForm from "./AuthForm";
 const mockPush = jest.fn();
 const mockSignIn = jest.fn();
 
+let mockSearchParams = new URLSearchParams();
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => mockSearchParams,
 }));
 
 jest.mock("next-auth/react", () => ({
@@ -31,6 +32,7 @@ global.fetch = mockFetch;
 describe("AuthForm", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSearchParams = new URLSearchParams();
   });
 
   describe("signin mode", () => {
@@ -200,6 +202,80 @@ describe("AuthForm", () => {
       await waitFor(() => {
         expect(screen.getByText("Sign up failed. Please try again.")).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("callbackUrl safety", () => {
+    it("rejects callbackUrl starting with // (open redirect protection) in signin mode", async () => {
+      mockSearchParams = new URLSearchParams("callbackUrl=//evil.com");
+      mockSignIn.mockResolvedValue({ error: null });
+
+      render(<AuthForm mode="signin" />);
+
+      fireEvent.change(screen.getByPlaceholderText("you@example.com"), {
+        target: { value: "test@test.com" },
+      });
+      fireEvent.change(screen.getByPlaceholderText("--------"), {
+        target: { value: "password123" },
+      });
+      fireEvent.submit(screen.getByRole("button", { name: /sign in/i }));
+
+      await waitFor(() => {
+        // Should redirect to /analyze (default), not //evil.com
+        expect(mockPush).toHaveBeenCalledWith("/analyze");
+      });
+    });
+
+    it("rejects callbackUrl starting with // in signup mode", async () => {
+      mockSearchParams = new URLSearchParams("callbackUrl=//evil.com");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ id: "user-1" }),
+      });
+      mockSignIn.mockResolvedValue({ error: null });
+
+      render(<AuthForm mode="signup" />);
+
+      fireEvent.change(screen.getByPlaceholderText("you@example.com"), {
+        target: { value: "test@test.com" },
+      });
+      fireEvent.change(screen.getByPlaceholderText("Min. 8 characters"), {
+        target: { value: "password123" },
+      });
+      fireEvent.submit(screen.getByRole("button", { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith("/analyze");
+      });
+    });
+
+    it("includes callbackUrl in sign-up link when it differs from /analyze", () => {
+      mockSearchParams = new URLSearchParams("callbackUrl=/pricing");
+      render(<AuthForm mode="signin" />);
+
+      const signUpLink = screen.getByText("Sign up");
+      expect(signUpLink.closest("a")).toHaveAttribute(
+        "href",
+        expect.stringContaining("callbackUrl=%2Fpricing")
+      );
+    });
+
+    it("includes callbackUrl in sign-in link when it differs from /analyze", () => {
+      mockSearchParams = new URLSearchParams("callbackUrl=/pricing");
+      render(<AuthForm mode="signup" />);
+
+      const signInLink = screen.getByText("Sign in");
+      expect(signInLink.closest("a")).toHaveAttribute(
+        "href",
+        expect.stringContaining("callbackUrl=%2Fpricing")
+      );
+    });
+
+    it("does not include callbackUrl in sign-up link when it is /analyze", () => {
+      render(<AuthForm mode="signin" />);
+
+      const signUpLink = screen.getByText("Sign up");
+      expect(signUpLink.closest("a")).toHaveAttribute("href", "/signup");
     });
   });
 });

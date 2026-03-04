@@ -202,6 +202,16 @@ describe('POST /api/analyze', () => {
     expect(body.error).toMatch(/API rate limit exceeded/);
   });
 
+  it('returns 500 with generic message when Claude throws non-Error (line 156)', async () => {
+    const mockCreate = jest.fn().mockRejectedValue('string error');
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe('Claude API error');
+  });
+
   describe('Auth and usage limits (lines 117-132, 138, 178-181)', () => {
     it('returns 403 when auth is enabled and usage limit is reached', async () => {
       Object.assign(mockAuthConfig, { isAuthEnabled: true });
@@ -269,6 +279,47 @@ describe('POST /api/analyze', () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toContain('filename and text');
+    });
+
+    it('skips usage check when auth is enabled but session has no user id', async () => {
+      Object.assign(mockAuthConfig, { isAuthEnabled: true });
+      mockAuth.mockResolvedValue({ user: {} }); // no id
+
+      const mockCreate = jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+      });
+      MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+      const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
+      expect(res.status).toBe(200);
+      expect(mockCanRunAnalysis).not.toHaveBeenCalled();
+
+      // Restore
+      Object.assign(mockAuthConfig, { isAuthEnabled: false });
+    });
+
+    it('handles canRunAnalysis returning undefined tier (line 132)', async () => {
+      Object.assign(mockAuthConfig, { isAuthEnabled: true });
+      mockAuth.mockResolvedValue({ user: { id: 'user-no-tier' } });
+      mockCanRunAnalysis.mockResolvedValue({ allowed: true }); // no tier field
+
+      const mockCreate = jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+      });
+      MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+      const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
+      expect(res.status).toBe(200);
+
+      // Should call serverTrack with tier: null
+      expect(serverTrack).toHaveBeenCalledWith('user-no-tier', 'analysis_consumed', {
+        user_id: 'user-no-tier',
+        tier: null,
+        is_byok: false,
+      });
+
+      // Restore
+      Object.assign(mockAuthConfig, { isAuthEnabled: false });
     });
   });
 
