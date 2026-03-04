@@ -15,6 +15,21 @@ jest.mock('@anthropic-ai/sdk', () => {
   };
 });
 
+jest.mock('@/auth', () => ({
+  auth: jest.fn().mockResolvedValue(null),
+}));
+
+jest.mock('@/lib/auth-config', () => ({
+  isAuthEnabled: false,
+  AUTH_ENABLED: false,
+  STRIPE_ENABLED: false,
+}));
+
+jest.mock('@/lib/usage', () => ({
+  canRunAnalysis: jest.fn().mockResolvedValue({ allowed: true }),
+  incrementUsage: jest.fn().mockResolvedValue(undefined),
+}));
+
 const MockAnthropic = jest.requireMock('@anthropic-ai/sdk').default;
 
 const validAnalysis = {
