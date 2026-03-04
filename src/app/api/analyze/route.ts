@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import type { Session } from 'next-auth';
 import { auth } from '@/auth';
 import { isAuthEnabled } from '@/lib/auth-config';
 import { canRunAnalysis, incrementUsage } from '@/lib/usage';
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
 
   // Usage check: if not BYOK and auth is enabled, enforce limits
   let sessionUserId: string | undefined;
-  let session: Awaited<ReturnType<typeof auth>> | null = null;
+  let session: Session | null = null;
   if (!isByok && isAuthEnabled) {
     session = await auth();
     if (session?.user?.id) {
@@ -183,7 +184,7 @@ export async function POST(req: NextRequest) {
   const trackDistinctId = sessionUserId ?? 'anonymous';
   await serverTrack(trackDistinctId, 'analysis_consumed', {
     user_id: sessionUserId ?? null,
-    tier: session?.user?.tier ?? null,
+    tier: null,
     is_byok: isByok,
   }).catch(() => {}); // don't fail the request if tracking fails
 

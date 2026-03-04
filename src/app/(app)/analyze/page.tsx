@@ -177,7 +177,7 @@ function AnalyzeWizard() {
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 403 && data.error === "limit_reached") {
-          track('upgrade_prompt_shown', { current_tier: session?.user?.tier ?? 'free' });
+          track('upgrade_prompt_shown', { current_tier: data.tier ?? 'free' });
           setShowUpgradePrompt(true);
           return;
         }
