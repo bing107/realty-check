@@ -36,9 +36,16 @@ jest.mock('@/lib/prisma', () => ({
   },
 }));
 
+jest.mock('@/lib/posthog-server', () => ({
+  serverTrack: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { POST } from './route';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { serverTrack } from '@/lib/posthog-server';
+
+const mockServerTrack = serverTrack as jest.Mock;
 
 const mockAuth = auth as jest.Mock;
 const mockPrisma = prisma as unknown as {
@@ -154,5 +161,46 @@ describe('POST /api/stripe/checkout', () => {
 
     const body = await res.json();
     expect(body.error).toBe('Stripe price not configured');
+  });
+
+  describe('PostHog tracking', () => {
+    it('calls serverTrack with stripe_checkout_started on success', async () => {
+      mockAuth.mockResolvedValue({
+        user: { id: 'user-1', email: 'test@example.com' },
+      });
+      mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+        stripeCustomerId: 'cus_existing_456',
+        email: 'test@example.com',
+      });
+      mockStripeObj.checkout.sessions.create.mockResolvedValue({
+        url: 'https://checkout.stripe.com/session_789',
+      });
+
+      const res = await POST();
+      expect(res.status).toBe(200);
+
+      expect(mockServerTrack).toHaveBeenCalledWith('user-1', 'stripe_checkout_started', {
+        user_id: 'user-1',
+        target_tier: 'pro',
+      });
+    });
+
+    it('does not call serverTrack when user is unauthorized', async () => {
+      mockAuth.mockResolvedValue(null);
+
+      const res = await POST();
+      expect(res.status).toBe(401);
+
+      expect(mockServerTrack).not.toHaveBeenCalled();
+    });
+
+    it('does not call serverTrack when Stripe is disabled', async () => {
+      mockStripeEnabled = false;
+
+      const res = await POST();
+      expect(res.status).toBe(503);
+
+      expect(mockServerTrack).not.toHaveBeenCalled();
+    });
   });
 });

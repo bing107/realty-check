@@ -30,7 +30,12 @@ jest.mock('@/lib/usage', () => ({
   incrementUsage: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('@/lib/posthog-server', () => ({
+  serverTrack: jest.fn().mockResolvedValue(undefined),
+}));
+
 const MockAnthropic = jest.requireMock('@anthropic-ai/sdk').default;
+const { serverTrack } = jest.requireMock('@/lib/posthog-server') as { serverTrack: jest.Mock };
 
 const validAnalysis = {
   property: { address: '123 Main St', sqm: 75, units: 12, yearBuilt: 1985, type: 'ETW' },
@@ -189,5 +194,45 @@ describe('POST /api/analyze', () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error).toMatch(/API rate limit exceeded/);
+  });
+
+  describe('PostHog tracking', () => {
+    it('calls serverTrack with analysis_consumed on success', async () => {
+      const mockCreate = jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+      });
+      MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+      const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
+      expect(res.status).toBe(200);
+
+      expect(serverTrack).toHaveBeenCalledWith('anonymous', 'analysis_consumed', {
+        user_id: null,
+        tier: null,
+        is_byok: false,
+      });
+    });
+
+    it('does not call serverTrack when request is invalid (400)', async () => {
+      const res = await POST(makeRequest({}));
+      expect(res.status).toBe(400);
+      expect(serverTrack).not.toHaveBeenCalled();
+    });
+
+    it('does not call serverTrack when API key is missing (401)', async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'hello' }] }));
+      expect(res.status).toBe(401);
+      expect(serverTrack).not.toHaveBeenCalled();
+    });
+
+    it('does not call serverTrack when Claude API throws (500)', async () => {
+      const mockCreate = jest.fn().mockRejectedValue(new Error('API error'));
+      MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+      const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
+      expect(res.status).toBe(500);
+      expect(serverTrack).not.toHaveBeenCalled();
+    });
   });
 });

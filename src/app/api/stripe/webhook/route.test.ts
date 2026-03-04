@@ -23,10 +23,17 @@ jest.mock('@/lib/prisma', () => ({
   },
 }));
 
+jest.mock('@/lib/posthog-server', () => ({
+  serverTrack: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { POST } from './route';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stripe } from '@/lib/stripe';
+import { serverTrack } from '@/lib/posthog-server';
+
+const mockServerTrack = serverTrack as jest.Mock;
 
 const mockPrisma = prisma as unknown as {
   user: {
@@ -331,5 +338,108 @@ describe('POST /api/stripe/webhook', () => {
     const body = await res.json();
     expect(body.received).toBe(true);
     expect(mockPrisma.user.update).not.toHaveBeenCalled();
+  });
+
+  describe('PostHog tracking', () => {
+    it('calls serverTrack with subscription_created on checkout.session.completed', async () => {
+      const mockEvent = {
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            mode: 'subscription',
+            customer: 'cus_123',
+            subscription: 'sub_456',
+            customer_email: 'user@example.com',
+            amount_total: 2900,
+          },
+        },
+      };
+
+      mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
+      mockStripe.subscriptions.retrieve.mockResolvedValue({
+        items: { data: [{ current_period_end: 1735689600 }] },
+      });
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        stripeCustomerId: 'cus_123',
+      });
+      mockPrisma.user.update.mockResolvedValue({});
+
+      const req = makeWebhookRequest(JSON.stringify(mockEvent));
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+
+      expect(mockServerTrack).toHaveBeenCalledWith('user-1', 'subscription_created', {
+        user_id: 'user-1',
+        tier: 'pro',
+        price: 29,
+      });
+    });
+
+    it('calls serverTrack with subscription_cancelled on customer.subscription.deleted', async () => {
+      const mockEvent = {
+        type: 'customer.subscription.deleted',
+        data: {
+          object: {
+            id: 'sub_to_delete',
+            customer: 'cus_123',
+          },
+        },
+      };
+
+      mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        stripeSubscriptionId: 'sub_to_delete',
+      });
+      mockPrisma.user.update.mockResolvedValue({});
+
+      const req = makeWebhookRequest(JSON.stringify(mockEvent));
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+
+      expect(mockServerTrack).toHaveBeenCalledWith('user-1', 'subscription_cancelled', {
+        user_id: 'user-1',
+        tier: 'free',
+      });
+    });
+
+    it('does not call serverTrack when no user is found', async () => {
+      const mockEvent = {
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            mode: 'subscription',
+            customer: 'cus_unknown',
+            subscription: 'sub_unknown',
+            customer_email: null,
+          },
+        },
+      };
+
+      mockStripe.webhooks.constructEvent.mockReturnValue(mockEvent);
+      mockStripe.subscriptions.retrieve.mockResolvedValue({
+        items: { data: [{ current_period_end: 1735689600 }] },
+      });
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      const req = makeWebhookRequest(JSON.stringify(mockEvent));
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+
+      expect(mockServerTrack).not.toHaveBeenCalled();
+    });
+
+    it('does not call serverTrack when signature verification fails', async () => {
+      mockStripe.webhooks.constructEvent.mockImplementation(() => {
+        throw new Error('Invalid signature');
+      });
+
+      const req = makeWebhookRequest('{}', 'bad_sig');
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+
+      expect(mockServerTrack).not.toHaveBeenCalled();
+    });
   });
 });
