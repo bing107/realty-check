@@ -170,7 +170,11 @@ export async function POST(req: NextRequest) {
 
   // Increment usage for authenticated non-BYOK users after successful analysis
   if (sessionUserId && !isByok) {
-    await incrementUsage(sessionUserId);
+    try {
+      await incrementUsage(sessionUserId);
+    } catch (err) {
+      console.error("Failed to increment usage:", err);
+    }
   }
 
   return NextResponse.json({ analysis });

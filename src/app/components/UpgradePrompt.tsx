@@ -15,9 +15,11 @@ export default function UpgradePrompt({ onClose }: UpgradePromptProps) {
     try {
       const res = await fetch("/api/stripe/checkout", { method: "POST" });
       const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
+      if (!res.ok || !data.url) {
+        setLoading(false);
+        return;
       }
+      window.location.href = data.url;
     } catch {
       setLoading(false);
     }

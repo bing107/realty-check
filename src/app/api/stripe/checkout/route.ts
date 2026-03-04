@@ -37,9 +37,8 @@ export async function POST() {
     return NextResponse.json({ error: 'Stripe price not configured' }, { status: 503 });
   }
 
-  const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000';
+  const baseUrl = process.env.NEXTAUTH_URL
+    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
   const checkoutSession = await stripe.checkout.sessions.create({
     customer: customerId,
