@@ -97,6 +97,39 @@ describe('POST /api/stripe/checkout', () => {
     expect(res.status).toBe(401);
   });
 
+  it('returns 401 when session has no user id (line 26)', async () => {
+    mockAuth.mockResolvedValue({ user: { email: 'no-id@test.com' } });
+
+    const res = await POST();
+    expect(res.status).toBe(401);
+  });
+
+  it('uses VERCEL_URL as base when NEXTAUTH_URL is not set (lines 41-42)', async () => {
+    delete process.env.NEXTAUTH_URL;
+    process.env.VERCEL_URL = 'my-app.vercel.app';
+
+    mockAuth.mockResolvedValue({
+      user: { id: 'user-1', email: 'test@example.com' },
+    });
+    mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+      stripeCustomerId: 'cus_existing',
+      email: 'test@example.com',
+    });
+    mockStripeObj.checkout.sessions.create.mockResolvedValue({
+      url: 'https://checkout.stripe.com/session_test',
+    });
+
+    const res = await POST();
+    expect(res.status).toBe(200);
+
+    expect(mockStripeObj.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success_url: 'https://my-app.vercel.app/analyze?checkout=success',
+        cancel_url: 'https://my-app.vercel.app/pricing',
+      })
+    );
+  });
+
   it('creates a new Stripe customer when user has no stripeCustomerId', async () => {
     mockAuth.mockResolvedValue({
       user: { id: 'user-1', email: 'test@example.com' },
@@ -143,6 +176,56 @@ describe('POST /api/stripe/checkout', () => {
     expect(body.url).toBe('https://checkout.stripe.com/session_456');
 
     expect(mockStripeObj.customers.create).not.toHaveBeenCalled();
+  });
+
+  it('uses session.user.email when user.email is null (line 26)', async () => {
+    mockAuth.mockResolvedValue({
+      user: { id: 'user-1', email: 'session@example.com' },
+    });
+    mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+      stripeCustomerId: null,
+      email: null,  // user.email is null
+    });
+    mockStripeObj.customers.create.mockResolvedValue({ id: 'cus_fallback' });
+    mockPrisma.user.update.mockResolvedValue({});
+    mockStripeObj.checkout.sessions.create.mockResolvedValue({
+      url: 'https://checkout.stripe.com/session_fallback',
+    });
+
+    const res = await POST();
+    expect(res.status).toBe(200);
+
+    // user.email is null, so falls back to session.user.email
+    expect(mockStripeObj.customers.create).toHaveBeenCalledWith({
+      email: 'session@example.com',
+      metadata: { userId: 'user-1' },
+    });
+  });
+
+  it('uses localhost:3000 as fallback when neither NEXTAUTH_URL nor VERCEL_URL is set (line 42)', async () => {
+    delete process.env.NEXTAUTH_URL;
+    delete process.env.VERCEL_URL;
+
+    mockAuth.mockResolvedValue({
+      user: { id: 'user-1', email: 'test@example.com' },
+    });
+    mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+      stripeCustomerId: 'cus_existing',
+      email: 'test@example.com',
+    });
+    mockStripeObj.checkout.sessions.create.mockResolvedValue({
+      url: 'https://checkout.stripe.com/session_local',
+    });
+
+    const res = await POST();
+    expect(res.status).toBe(200);
+
+    expect(mockStripeObj.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success_url: 'http://localhost:3000/analyze?checkout=success',
+        cancel_url: 'http://localhost:3000/pricing',
+      })
+    );
   });
 
   it('returns 503 when STRIPE_PRO_PRICE_ID is not set', async () => {
@@ -201,6 +284,23 @@ describe('POST /api/stripe/checkout', () => {
       expect(res.status).toBe(503);
 
       expect(mockServerTrack).not.toHaveBeenCalled();
+    });
+
+    it('succeeds even when serverTrack rejects (covers .catch callback)', async () => {
+      mockServerTrack.mockRejectedValueOnce(new Error('PostHog down'));
+      mockAuth.mockResolvedValue({
+        user: { id: 'user-1', email: 'test@example.com' },
+      });
+      mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+        stripeCustomerId: 'cus_existing_456',
+        email: 'test@example.com',
+      });
+      mockStripeObj.checkout.sessions.create.mockResolvedValue({
+        url: 'https://checkout.stripe.com/session_789',
+      });
+
+      const res = await POST();
+      expect(res.status).toBe(200);
     });
   });
 });

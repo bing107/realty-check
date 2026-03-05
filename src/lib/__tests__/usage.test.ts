@@ -93,6 +93,24 @@ describe('usage.ts', () => {
       expect(usage.used).toBe(100);
     });
 
+    it('defaults to limit of 1 for unknown tier on period reset (line 45)', async () => {
+      const lastMonth = new Date();
+      lastMonth.setMonth(lastMonth.getMonth() - 1);
+      const oldPeriodStart = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
+
+      mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+        tier: 'unknown-tier',
+        analysisCount: 5,
+        analysisPeriodStart: oldPeriodStart,
+      });
+      mockPrisma.user.update.mockResolvedValue({});
+
+      const usage = await getUserUsage('user-1');
+
+      expect(usage.used).toBe(0);
+      expect(usage.limit).toBe(1);
+    });
+
     it('defaults to limit of 1 for unknown tier', async () => {
       const now = new Date();
       const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);

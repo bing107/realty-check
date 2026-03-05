@@ -83,4 +83,11 @@ describe("WizardStepIndicator", () => {
     expect(screen.queryByText("Upload...")).not.toBeInTheDocument();
     expect(screen.getByText("Upload")).toBeInTheDocument();
   });
+
+  it("falls back to step index 0 for unknown step values (line 18)", () => {
+    // Force an unknown step value to test the fallback return 0 in getStepIndex
+    render(<WizardStepIndicator currentStep={"unknown" as never} />);
+    // It should default to step index 0 (Upload active)
+    expect(screen.getByText("Upload")).toHaveClass("text-blue-600");
+  });
 });

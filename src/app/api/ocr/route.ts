@@ -21,19 +21,25 @@ export async function POST(req: NextRequest) {
   }
   const images: string[] = body.images;
 
-  const imageBlocks: Anthropic.ImageBlockParam[] = images.map((dataUrl) => {
+  const imageBlocks: Anthropic.ImageBlockParam[] = [];
+  for (const dataUrl of images) {
     const match = dataUrl.match(/^data:(image\/(?:jpeg|png|gif|webp));base64,(.+)$/);
-    if (!match) throw new Error('Unsupported image format in OCR input');
+    if (!match) {
+      return NextResponse.json(
+        { error: 'Unsupported image format. Supported: jpeg, png, gif, webp' },
+        { status: 400 },
+      );
+    }
     const [, mediaType, base64Data] = match;
-    return {
+    imageBlocks.push({
       type: 'image',
       source: {
         type: 'base64',
         media_type: mediaType as Anthropic.Base64ImageSource['media_type'],
         data: base64Data,
       },
-    };
-  });
+    });
+  }
 
   const client = new Anthropic({ apiKey });
 

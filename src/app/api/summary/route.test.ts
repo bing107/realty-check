@@ -222,4 +222,14 @@ describe('POST /api/summary', () => {
     const body = await res.json();
     expect(body.error).toMatch(/Unexpected response/);
   });
+
+  it('returns 500 when Claude API throws non-Error (line 73 branch)', async () => {
+    const mockCreate = jest.fn().mockRejectedValue('string-error');
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({ analysis: validAnalysis, metrics: validMetrics }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe('Claude API error');
+  });
 });

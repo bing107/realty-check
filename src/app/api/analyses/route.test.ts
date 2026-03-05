@@ -188,4 +188,40 @@ describe("POST /api/analyses", () => {
       })
     );
   });
+
+  it("returns 400 when analysisJson is not provided (line 36)", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "user-123" } });
+
+    const res = await POST(makePostRequest({ filename: "test.pdf" }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("analysisJson is required");
+  });
+
+  it("returns 400 when body is malformed JSON (line 36 catch)", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "user-123" } });
+
+    const req = new NextRequest("http://localhost/api/analyses", {
+      method: "POST",
+      body: "not-json{{{",
+      headers: { "content-type": "application/json" },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 500 when prisma.analysis.create throws (line 58)", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "user-123" } });
+    mockPrisma.analysis.create.mockRejectedValue(new Error("DB error"));
+
+    const res = await POST(
+      makePostRequest({
+        filename: "test.pdf",
+        analysisJson: { summary: "test" },
+      })
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe("Failed to save analysis");
+  });
 });

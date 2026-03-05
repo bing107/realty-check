@@ -122,6 +122,34 @@ describe('POST /api/ocr', () => {
     expect(body.error).toMatch(/Rate limit exceeded/);
   });
 
+  it('returns 500 with generic message when Claude API throws non-Error (line 59)', async () => {
+    const mockCreate = jest.fn().mockRejectedValue('string error');
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({
+      images: ['data:image/jpeg;base64,abc123'],
+      filename: 'scan.pdf',
+    }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe('Claude API error');
+  });
+
+  it('returns 500 when Claude returns empty content array (line 59)', async () => {
+    const mockCreate = jest.fn().mockResolvedValue({
+      content: [],
+    });
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({
+      images: ['data:image/jpeg;base64,abc123'],
+      filename: 'scan.pdf',
+    }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toMatch(/Unexpected response/);
+  });
+
   it('returns 500 when Claude returns non-text content type', async () => {
     const mockCreate = jest.fn().mockResolvedValue({
       content: [{ type: 'tool_use', id: 'tool_1', name: 'some_tool', input: {} }],
@@ -183,5 +211,25 @@ describe('POST /api/ocr', () => {
     }));
     expect(res.status).toBe(200);
     expect(MockAnthropic).toHaveBeenCalledWith({ apiKey: 'env-key-456' });
+  });
+
+  it('returns 400 when images array contains non-strings (line 20)', async () => {
+    const res = await POST(makeRequest({
+      images: [123, null],
+      filename: 'scan.pdf',
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/base64 strings/);
+  });
+
+  it('returns 400 on unsupported image format (e.g. BMP)', async () => {
+    const res = await POST(makeRequest({
+      images: ['data:image/bmp;base64,abc123'],
+      filename: 'scan.pdf',
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/Unsupported image format/);
   });
 });

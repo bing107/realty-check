@@ -296,4 +296,5 @@ describe('POST /api/compare', () => {
     const res = await POST(makeRequest({ address: 'Berlin', price: -Infinity, sqm: 75 }));
     expect(res.status).toBe(400);
   });
+
 });
