@@ -122,6 +122,19 @@ describe('POST /api/ocr', () => {
     expect(body.error).toMatch(/Rate limit exceeded/);
   });
 
+  it('returns 500 with generic message when Claude API throws non-Error (line 59)', async () => {
+    const mockCreate = jest.fn().mockRejectedValue('string error');
+    MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+    const res = await POST(makeRequest({
+      images: ['data:image/jpeg;base64,abc123'],
+      filename: 'scan.pdf',
+    }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe('Claude API error');
+  });
+
   it('returns 500 when Claude returns empty content array (line 59)', async () => {
     const mockCreate = jest.fn().mockResolvedValue({
       content: [],

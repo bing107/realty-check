@@ -440,6 +440,185 @@ describe('POST /api/stripe/webhook', () => {
     expect(mockPrisma.user.update).not.toHaveBeenCalled();
   });
 
+  it('returns 400 with generic message when constructEvent throws non-Error', async () => {
+    mockStripeObj.webhooks.constructEvent.mockImplementation(() => { throw 'string error'; });
+    const res = await POST(makeWebhookRequest('{}'));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('Webhook signature verification failed');
+  });
+
+  it('handles checkout.session.completed with customer/subscription as objects', async () => {
+    const event = {
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          mode: 'subscription',
+          customer: { id: 'cus_obj_123' },
+          subscription: { id: 'sub_obj_456' },
+          customer_email: null,
+          amount_total: 500,
+        },
+      },
+    };
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(event);
+    mockStripeObj.subscriptions.retrieve.mockResolvedValue({
+      id: 'sub_obj_456',
+      items: { data: [{ current_period_end: 1700000000 }] },
+    });
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-1', email: 'a@test.com' });
+    mockPrisma.user.update.mockResolvedValue({});
+
+    const res = await POST(makeWebhookRequest('{}'));
+    expect(res.status).toBe(200);
+    expect(mockStripeObj.subscriptions.retrieve).toHaveBeenCalledWith('sub_obj_456', expect.any(Object));
+  });
+
+  it('handles subscription.updated with customer as object', async () => {
+    const event = {
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_upd_789',
+          customer: { id: 'cus_upd_999' },
+          status: 'active',
+          items: { data: [{ current_period_end: 1700000000 }] },
+        },
+      },
+    };
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(event);
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-2' });
+    mockPrisma.user.update.mockResolvedValue({});
+
+    const res = await POST(makeWebhookRequest('{}'));
+    expect(res.status).toBe(200);
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { stripeCustomerId: 'cus_upd_999' } });
+  });
+
+  it('handles subscription.updated where user found by subscriptionId not customerId', async () => {
+    const event = {
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_fall_123',
+          customer: 'cus_fall_456',
+          status: 'active',
+          items: { data: [{ current_period_end: 1700000000 }] },
+        },
+      },
+    };
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(event);
+    mockPrisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'user-3' });
+    mockPrisma.user.update.mockResolvedValue({});
+
+    const res = await POST(makeWebhookRequest('{}'));
+    expect(res.status).toBe(200);
+    expect(mockPrisma.user.update).toHaveBeenCalled();
+  });
+
+  it('handles subscription.deleted where user is found', async () => {
+    const event = {
+      type: 'customer.subscription.deleted',
+      data: {
+        object: { id: 'sub_del_111' },
+      },
+    };
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(event);
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-del-1' });
+    mockPrisma.user.update.mockResolvedValue({});
+
+    const res = await POST(makeWebhookRequest('{}'));
+    expect(res.status).toBe(200);
+    expect(mockPrisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-del-1' },
+      data: {
+        tier: 'free',
+        stripeSubscriptionId: null,
+        stripeCurrentPeriodEnd: null,
+      },
+    });
+  });
+
+  it('breaks early in checkout.session.completed when customer/subscription objects have no id (line 56)', async () => {
+    const event = {
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          mode: 'subscription',
+          customer: { name: 'no-id' },       // object without id field
+          subscription: { name: 'no-id' },    // object without id field
+          customer_email: null,
+        },
+      },
+    };
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(event);
+
+    const res = await POST(makeWebhookRequest('{}'));
+    expect(res.status).toBe(200);
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    expect(mockStripeObj.subscriptions.retrieve).not.toHaveBeenCalled();
+  });
+
+  it('handles subscription.updated with null customer (line 101)', async () => {
+    const event = {
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_nullcust_789',
+          customer: null,
+          status: 'active',
+          items: { data: [{ current_period_end: 1700000000 }] },
+        },
+      },
+    };
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(event);
+    // With null customer, customerId is null, so it goes straight to subscriptionId lookup
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-nullcust' });
+    mockPrisma.user.update.mockResolvedValue({});
+
+    const res = await POST(makeWebhookRequest('{}'));
+    expect(res.status).toBe(200);
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { stripeSubscriptionId: 'sub_nullcust_789' } });
+    expect(mockPrisma.user.update).toHaveBeenCalled();
+  });
+
+  it('handles subscription.updated where no user is found at all (line 111 false branch)', async () => {
+    const event = {
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_nousers_123',
+          customer: 'cus_nousers_456',
+          status: 'active',
+          items: { data: [{ current_period_end: 1700000000 }] },
+        },
+      },
+    };
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(event);
+    mockPrisma.user.findUnique.mockResolvedValue(null); // no user found by either lookup
+
+    const res = await POST(makeWebhookRequest('{}'));
+    expect(res.status).toBe(200);
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('handles subscription.deleted where no user is found (line 132 false branch)', async () => {
+    const event = {
+      type: 'customer.subscription.deleted',
+      data: {
+        object: { id: 'sub_del_notfound' },
+      },
+    };
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(event);
+    mockPrisma.user.findUnique.mockResolvedValue(null);
+
+    const res = await POST(makeWebhookRequest('{}'));
+    expect(res.status).toBe(200);
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
+  });
+
   describe('PostHog tracking', () => {
     it('calls serverTrack with subscription_created on checkout.session.completed', async () => {
       const mockEvent = {
