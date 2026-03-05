@@ -223,6 +223,10 @@ describe('POST /api/analyze', () => {
   });
 
   describe('Auth and usage limits (lines 117-132, 138, 178-181)', () => {
+    afterEach(() => {
+      Object.assign(mockAuthConfig, { isAuthEnabled: false });
+    });
+
     it('returns 403 when auth is enabled and usage limit is reached', async () => {
       Object.assign(mockAuthConfig, { isAuthEnabled: true });
       mockAuth.mockResolvedValue({ user: { id: 'user-123' } });
@@ -240,9 +244,6 @@ describe('POST /api/analyze', () => {
       expect(body.tier).toBe('free');
       expect(body.used).toBe(1);
       expect(body.limit).toBe(1);
-
-      // Restore
-      Object.assign(mockAuthConfig, { isAuthEnabled: false });
     });
 
     it('allows when auth is enabled and usage check passes', async () => {
@@ -258,9 +259,6 @@ describe('POST /api/analyze', () => {
       const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
       expect(res.status).toBe(200);
       expect(mockIncrementUsage).toHaveBeenCalledWith('user-456');
-
-      // Restore
-      Object.assign(mockAuthConfig, { isAuthEnabled: false });
     });
 
     it('handles incrementUsage error gracefully (lines 178-181)', async () => {
@@ -279,9 +277,6 @@ describe('POST /api/analyze', () => {
       expect(res.status).toBe(200);
       expect(consoleSpy).toHaveBeenCalledWith('Failed to increment usage:', expect.any(Error));
       consoleSpy.mockRestore();
-
-      // Restore
-      Object.assign(mockAuthConfig, { isAuthEnabled: false });
     });
 
     it('returns 400 when texts items are not objects with filename and text (line 138)', async () => {
@@ -303,9 +298,6 @@ describe('POST /api/analyze', () => {
       const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
       expect(res.status).toBe(200);
       expect(mockCanRunAnalysis).not.toHaveBeenCalled();
-
-      // Restore
-      Object.assign(mockAuthConfig, { isAuthEnabled: false });
     });
 
     it('handles canRunAnalysis returning undefined tier (line 132)', async () => {
@@ -328,8 +320,6 @@ describe('POST /api/analyze', () => {
         is_byok: false,
       });
 
-      // Restore
-      Object.assign(mockAuthConfig, { isAuthEnabled: false });
     });
   });
 

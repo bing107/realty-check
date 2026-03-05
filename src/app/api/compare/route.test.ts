@@ -297,12 +297,4 @@ describe('POST /api/compare', () => {
     expect(res.status).toBe(400);
   });
 
-  // 29. Cache eviction when cache reaches MAX_CACHE_SIZE (line 40)
-  it('evicts oldest cache entry when cache reaches max size', async () => {
-    // This is hard to test directly, but we can ensure the route still works
-    // after many unique requests. The cache max size is 1000.
-    // We'll just verify the route handles unique requests fine.
-    const res = await POST(makeRequest({ address: 'Unique City Test', price: 999999, sqm: 99 }));
-    expect(res.status).toBe(200);
-  });
 });
