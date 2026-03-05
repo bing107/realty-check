@@ -20,16 +20,16 @@ test('/analyze loads with upload zone', async ({ page }) => {
     await expect(page.getByRole('heading', { name: /sign in|log in/i })).toBeVisible();
   } else {
     // Upload zone or dropzone should be visible
-    await expect(page.locator('[data-testid="dropzone"], [class*="dropzone"], input[type="file"]').first()).toBeTruthy();
+    await expect(page.locator('[data-testid="dropzone"], [class*="dropzone"], input[type="file"]').first()).toBeAttached();
   }
 });
 
 test('/pricing loads with tier cards', async ({ page }) => {
   await page.goto('/pricing');
   await expect(page).toHaveURL(/\/pricing/);
-  // Pricing page should have pricing tiers
-  const body = page.locator('body');
-  await expect(body).toBeVisible();
+  // Pricing page should display pricing-related content
+  const bodyText = await page.locator('body').textContent();
+  expect(bodyText?.toLowerCase()).toMatch(/free|pro|pricing|plan|month/i);
 });
 
 test('/login loads with email/password form', async ({ page }) => {
