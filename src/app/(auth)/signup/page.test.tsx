@@ -1,6 +1,6 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
-import SignupPage from "./page";
+import SignupPage, { metadata } from "./page";
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -37,5 +37,10 @@ describe("SignupPage", () => {
     render(<SignupPage />);
     // AuthForm in signup mode has a "Create account" submit button
     expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
+  });
+
+  it("exports metadata with correct title", () => {
+    expect(metadata).toBeDefined();
+    expect((metadata as { title: string }).title).toMatch(/Sign up/);
   });
 });

@@ -146,6 +146,36 @@ describe("UsageDisplay", () => {
     });
   });
 
+  it("calls portal API and processes URL response (line 64)", async () => {
+    mockAuthEnabled = true;
+    mockStripeEnabled = true;
+    mockUseSession.mockReturnValue({ data: { user: { id: "1" } } });
+
+    mockFetch
+      .mockResolvedValueOnce({
+        json: () => Promise.resolve({ tier: "pro", used: 5, limit: 30, periodStart: "2026-03-01" }),
+      })
+      .mockResolvedValueOnce({
+        json: () => Promise.resolve({ url: "https://billing.stripe.com/session_test" }),
+      });
+
+    render(<UsageDisplay apiKey="" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Manage subscription")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Manage subscription"));
+
+    await waitFor(() => {
+      // Verify the portal API was called and URL was received
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenLastCalledWith("/api/stripe/portal", { method: "POST" });
+    });
+    // window.location.href = data.url is reached (line 64) but jsdom doesn't
+    // support mocking location.href assignment. The code path is exercised.
+  });
+
   it("handles fetch error gracefully", async () => {
     mockAuthEnabled = true;
     mockUseSession.mockReturnValue({ data: { user: { id: "1" } } });

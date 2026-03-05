@@ -110,4 +110,21 @@ describe("ApiKeyInput", () => {
     expect(localStorageMock.removeItem).toHaveBeenCalledWith("anthropic_api_key");
     expect(onChange).toHaveBeenCalledWith("");
   });
+
+  it("does not call onChange again on re-render when already initialized (line 15)", () => {
+    localStorageMock.getItem.mockReturnValue("sk-ant-stored-key");
+
+    const { rerender } = render(<ApiKeyInput value="" onChange={onChange} />);
+
+    // First render triggers the effect and calls onChange with stored key
+    expect(onChange).toHaveBeenCalledWith("sk-ant-stored-key");
+    const callCountAfterFirstRender = onChange.mock.calls.length;
+
+    // Rerender with a new value - the effect runs again because `value` dep changed,
+    // but initialized.current is true so it returns early on line 15
+    rerender(<ApiKeyInput value="sk-ant-stored-key" onChange={onChange} />);
+
+    // onChange should not have been called again from the useEffect
+    expect(onChange.mock.calls.length).toBe(callCountAfterFirstRender);
+  });
 });

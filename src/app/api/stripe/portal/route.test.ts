@@ -107,6 +107,27 @@ describe("POST /api/stripe/portal", () => {
     });
   });
 
+  it("uses localhost:3000 fallback when neither NEXTAUTH_URL nor VERCEL_URL is set (line 26)", async () => {
+    delete process.env.NEXTAUTH_URL;
+    delete process.env.VERCEL_URL;
+
+    mockAuth.mockResolvedValue({ user: { id: "user-1" } });
+    mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+      stripeCustomerId: "cus_123",
+    });
+    mockStripeObj.billingPortal.sessions.create.mockResolvedValue({
+      url: "https://billing.stripe.com/portal-session-local",
+    });
+
+    const res = await POST();
+    expect(res.status).toBe(200);
+
+    expect(mockStripeObj.billingPortal.sessions.create).toHaveBeenCalledWith({
+      customer: "cus_123",
+      return_url: "http://localhost:3000/account",
+    });
+  });
+
   it("uses VERCEL_URL when NEXTAUTH_URL is not set", async () => {
     delete process.env.NEXTAUTH_URL;
     process.env.VERCEL_URL = "my-app.vercel.app";

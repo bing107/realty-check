@@ -128,4 +128,13 @@ describe("UserMenu", () => {
     fireEvent.click(screen.getByText("Account"));
     expect(screen.queryByText("Account")).not.toBeInTheDocument();
   });
+
+  it("shows 'User' fallback in dropdown header when user has no name (line 64)", () => {
+    render(<UserMenu user={{ email: "test@example.com" }} />);
+    fireEvent.click(screen.getByLabelText("User menu"));
+
+    // In the dropdown, user.name || "User" should show "User"
+    const dropdownHeader = document.querySelector(".border-b.border-gray-100 p:first-child");
+    expect(dropdownHeader?.textContent).toBe("User");
+  });
 });

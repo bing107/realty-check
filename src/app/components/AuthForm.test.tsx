@@ -143,6 +143,27 @@ describe("AuthForm", () => {
       });
     });
 
+    it("shows 'Sign up failed' fallback when API returns no error message (line 58)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: () => Promise.resolve({}),
+      });
+
+      render(<AuthForm mode="signup" />);
+
+      fireEvent.change(screen.getByPlaceholderText("you@example.com"), {
+        target: { value: "test@test.com" },
+      });
+      fireEvent.change(screen.getByPlaceholderText("Min. 8 characters"), {
+        target: { value: "password123" },
+      });
+      fireEvent.submit(screen.getByRole("button", { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Sign up failed")).toBeInTheDocument();
+      });
+    });
+
     it("shows error from API response", async () => {
       mockFetch.mockResolvedValue({
         ok: false,

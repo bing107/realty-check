@@ -358,6 +358,43 @@ describe('POST /api/stripe/webhook', () => {
     });
   });
 
+  it('handles checkout.session.completed with no period end in subscription items (line 16)', async () => {
+    const mockEvent = {
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          mode: 'subscription',
+          customer: 'cus_nope',
+          subscription: 'sub_nope',
+          customer_email: null,
+        },
+      },
+    };
+
+    mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
+    // subscription with empty items data
+    mockStripeObj.subscriptions.retrieve.mockResolvedValue({
+      items: { data: [] },
+    });
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
+      id: 'user-period',
+      stripeCustomerId: 'cus_nope',
+    });
+    mockPrisma.user.update.mockResolvedValue({});
+
+    const req = makeWebhookRequest(JSON.stringify(mockEvent));
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    // getPeriodEnd returns null when no items
+    expect(mockPrisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-period' },
+      data: expect.objectContaining({
+        stripeCurrentPeriodEnd: null,
+      }),
+    });
+  });
+
   it('handles unrecognized event type without error', async () => {
     const mockEvent = {
       type: 'invoice.payment_succeeded',

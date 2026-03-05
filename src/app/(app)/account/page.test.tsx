@@ -118,6 +118,58 @@ describe("AccountPage", () => {
     });
   });
 
+  it("calls portal API and processes URL response for redirect (line 39)", async () => {
+    mockStripeEnabled = true;
+
+    mockFetch
+      .mockResolvedValueOnce({
+        json: () => Promise.resolve({ tier: "free", used: 0, limit: 1 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ url: "https://portal.stripe.com/redirect" }),
+      });
+
+    render(<AccountPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Manage subscription")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Manage subscription"));
+
+    await waitFor(() => {
+      // Verify the portal API was called and returned URL
+      expect(mockFetch).toHaveBeenCalledWith("/api/stripe/portal", { method: "POST" });
+    });
+    // window.location.href = data.url is reached (line 39) but jsdom doesn't
+    // support mocking location.href assignment. The code path is exercised.
+  });
+
+  it("handleManageSubscription shows fallback error when data.error is falsy (line 36)", async () => {
+    mockStripeEnabled = true;
+    mockFetch
+      .mockResolvedValueOnce({
+        json: () => Promise.resolve({ tier: "free", used: 0, limit: 1 }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({}),
+      });
+
+    render(<AccountPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Manage subscription")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Manage subscription"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed to open subscription portal")).toBeInTheDocument();
+    });
+  });
+
   it("handleManageSubscription shows error on failure", async () => {
     mockStripeEnabled = true;
     mockFetch

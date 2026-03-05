@@ -211,6 +211,42 @@ describe("HistoryPage", () => {
     // No preview text should appear (parts.join returns empty string -> null)
   });
 
+  it("shows +0/mo when monthlyNet is exactly 0 (line 38 sign branch)", async () => {
+    mockFetch.mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          analyses: [
+            {
+              id: "1",
+              filename: "zero.pdf",
+              createdAt: "2026-01-15T00:00:00Z",
+              metrics: JSON.stringify({ grossYield: 0.04, monthlyNet: 0 }),
+            },
+          ],
+        }),
+    });
+
+    render(<HistoryPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("zero.pdf")).toBeInTheDocument();
+    });
+    // monthlyNet >= 0 is true for 0, so sign is "+"
+    expect(screen.getByText(/\+\u20AC0\/mo/)).toBeInTheDocument();
+  });
+
+  it("handles response with no analyses key (data.analyses || [] fallback, line 38)", async () => {
+    mockFetch.mockResolvedValue({
+      json: () => Promise.resolve({}),
+    });
+
+    render(<HistoryPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("No analyses yet")).toBeInTheDocument();
+    });
+  });
+
   it("shows both yield and positive monthly net together", async () => {
     mockFetch.mockResolvedValue({
       json: () =>

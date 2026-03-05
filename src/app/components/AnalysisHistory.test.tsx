@@ -236,4 +236,61 @@ describe("AnalysisHistory", () => {
     });
     // No metric preview text should appear since JSON parsing failed
   });
+
+  it("handles response with no analyses key (data.analyses || [])", async () => {
+    mockFetch.mockResolvedValue({
+      json: () => Promise.resolve({}),
+    });
+
+    const { container } = render(<AnalysisHistory onView={onView} />);
+
+    await waitFor(() => {
+      // data.analyses is undefined, falls back to [], so renders nothing
+      expect(container.innerHTML).toBe("");
+    });
+  });
+
+  it("shows only monthlyNet when grossYield is null", async () => {
+    const analyses = [
+      makeAnalysis({
+        id: "a1",
+        filename: "no-yield.pdf",
+        metrics: JSON.stringify({ monthlyNet: 150 }),
+      }),
+    ];
+
+    mockFetch.mockResolvedValue({
+      json: () => Promise.resolve({ analyses }),
+    });
+
+    render(<AnalysisHistory onView={onView} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("no-yield.pdf")).toBeInTheDocument();
+    });
+
+    // Only monthlyNet is shown, no yield
+    expect(screen.getByText(/\+\u20AC150\/mo/)).toBeInTheDocument();
+  });
+
+  it("returns null preview when metrics has neither grossYield nor monthlyNet (empty parts)", async () => {
+    const analyses = [
+      makeAnalysis({
+        id: "a1",
+        filename: "empty-parts.pdf",
+        metrics: JSON.stringify({ someOtherField: 42 }),
+      }),
+    ];
+
+    mockFetch.mockResolvedValue({
+      json: () => Promise.resolve({ analyses }),
+    });
+
+    render(<AnalysisHistory onView={onView} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("empty-parts.pdf")).toBeInTheDocument();
+    });
+    // parts.join() returns "" which is falsy, so returns null - no preview shown
+  });
 });

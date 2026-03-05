@@ -64,3 +64,67 @@ describe("PostHogProvider", () => {
     expect(screen.getByTestId("ph-provider")).toBeInTheDocument();
   });
 });
+
+// Separate describe block to test PostHogPageView with non-empty search params
+describe("PostHogPageView with search params", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it("appends query string to URL when searchParams is non-empty (line 16)", () => {
+    const navModule = jest.requireMock("next/navigation") as {
+      usePathname: () => string | null;
+      useSearchParams: () => URLSearchParams;
+    };
+    const originalUseSearchParams = navModule.useSearchParams;
+    navModule.useSearchParams = () => new URLSearchParams("foo=bar&baz=qux");
+
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test";
+
+    render(
+      <PostHogProvider>
+        <div>Content With Params</div>
+      </PostHogProvider>
+    );
+
+    expect(screen.getByText("Content With Params")).toBeInTheDocument();
+    // posthog.capture should have been called with a URL containing the query string
+    expect(mockCapture).toHaveBeenCalledWith("$pageview", {
+      "$current_url": expect.stringContaining("?foo=bar&baz=qux"),
+    });
+
+    // Restore original mock
+    navModule.useSearchParams = originalUseSearchParams;
+  });
+
+  it("does not capture pageview when pathname is null (line 13)", () => {
+    const navModule = jest.requireMock("next/navigation") as {
+      usePathname: () => string | null;
+      useSearchParams: () => URLSearchParams;
+    };
+    const originalUsePathname = navModule.usePathname;
+    navModule.usePathname = () => null;
+
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test";
+
+    render(
+      <PostHogProvider>
+        <div>Null Pathname</div>
+      </PostHogProvider>
+    );
+
+    expect(screen.getByText("Null Pathname")).toBeInTheDocument();
+    // posthog.capture should NOT have been called since pathname is null
+    expect(mockCapture).not.toHaveBeenCalled();
+
+    // Restore original mock
+    navModule.usePathname = originalUsePathname;
+  });
+});

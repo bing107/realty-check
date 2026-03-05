@@ -182,4 +182,50 @@ describe("ResultsPage", () => {
       expect(screen.getByText("Investment Report")).toBeInTheDocument();
     });
   });
+
+  it("shows Incomplete analysis data when summary has no investmentSummary or priceComparison (lines 77-78)", async () => {
+    mockFetch.mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          analysis: {
+            id: "1",
+            filename: "test.pdf",
+            createdAt: "2026-01-15T00:00:00Z",
+            analysisJson: JSON.stringify(validAnalysis),
+            metrics: JSON.stringify(validMetrics),
+            summary: JSON.stringify({}),
+          },
+        }),
+    });
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      // investmentSummary = null from {} || null, so shows incomplete
+      expect(screen.getByText("Incomplete analysis data")).toBeInTheDocument();
+    });
+  });
+
+  it("shows 'Analysis' fallback when filename is null (line 102)", async () => {
+    mockFetch.mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          analysis: {
+            id: "1",
+            filename: null,
+            createdAt: "2026-01-15T00:00:00Z",
+            analysisJson: JSON.stringify(validAnalysis),
+            metrics: JSON.stringify(validMetrics),
+            summary: JSON.stringify(validSummary),
+          },
+        }),
+    });
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Analysis" })).toBeInTheDocument();
+      expect(screen.getByText("Investment Report")).toBeInTheDocument();
+    });
+  });
 });

@@ -178,6 +178,56 @@ describe('POST /api/stripe/checkout', () => {
     expect(mockStripeObj.customers.create).not.toHaveBeenCalled();
   });
 
+  it('uses session.user.email when user.email is null (line 26)', async () => {
+    mockAuth.mockResolvedValue({
+      user: { id: 'user-1', email: 'session@example.com' },
+    });
+    mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+      stripeCustomerId: null,
+      email: null,  // user.email is null
+    });
+    mockStripeObj.customers.create.mockResolvedValue({ id: 'cus_fallback' });
+    mockPrisma.user.update.mockResolvedValue({});
+    mockStripeObj.checkout.sessions.create.mockResolvedValue({
+      url: 'https://checkout.stripe.com/session_fallback',
+    });
+
+    const res = await POST();
+    expect(res.status).toBe(200);
+
+    // user.email is null, so falls back to session.user.email
+    expect(mockStripeObj.customers.create).toHaveBeenCalledWith({
+      email: 'session@example.com',
+      metadata: { userId: 'user-1' },
+    });
+  });
+
+  it('uses localhost:3000 as fallback when neither NEXTAUTH_URL nor VERCEL_URL is set (line 42)', async () => {
+    delete process.env.NEXTAUTH_URL;
+    delete process.env.VERCEL_URL;
+
+    mockAuth.mockResolvedValue({
+      user: { id: 'user-1', email: 'test@example.com' },
+    });
+    mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+      stripeCustomerId: 'cus_existing',
+      email: 'test@example.com',
+    });
+    mockStripeObj.checkout.sessions.create.mockResolvedValue({
+      url: 'https://checkout.stripe.com/session_local',
+    });
+
+    const res = await POST();
+    expect(res.status).toBe(200);
+
+    expect(mockStripeObj.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success_url: 'http://localhost:3000/analyze?checkout=success',
+        cancel_url: 'http://localhost:3000/pricing',
+      })
+    );
+  });
+
   it('returns 503 when STRIPE_PRO_PRICE_ID is not set', async () => {
     delete process.env.STRIPE_PRO_PRICE_ID;
 

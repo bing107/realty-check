@@ -490,4 +490,86 @@ describe("ResultsDashboard", () => {
     );
     expect(screen.queryByText(/Monthly Cash Flow Projection/)).not.toBeInTheDocument();
   });
+
+  it("shows text-green-600 for high gross yield (>= 5) and high net yield (>= 4) (lines 55, 66)", () => {
+    const highYieldMetrics = {
+      ...sampleMetrics,
+      grossRentalYield: 6.0,
+      netRentalYield: 5.0,
+      monthlyCashFlow: 500,
+    };
+    render(
+      <ResultsDashboard
+        analysis={sampleAnalysis}
+        metrics={highYieldMetrics}
+        investmentSummary={sampleSummary}
+        priceComparison={samplePriceComparison}
+      />,
+    );
+    // Gross yield >= 5 -> green
+    const grossYieldValue = screen.getByText("6.00%");
+    expect(grossYieldValue.className).toContain("text-green-600");
+
+    // Net yield >= 4 -> green
+    const netYieldValue = screen.getByText("5.00%");
+    expect(netYieldValue.className).toContain("text-green-600");
+  });
+
+  it("covers yr > loanTermYears branch with loanTermYears < 25 (lines 149-150)", () => {
+    const shortLoanMetrics = {
+      ...sampleMetrics,
+      monthlyCashFlow: 200,
+      assumptions: { mortgageRate: 0.035, downPayment: 0.2, loanTermYears: 20 },
+    };
+    // Use analysis with expectedRent and hausgeld to verify the after-loan cashflow calculation
+    const analysisWithRent = {
+      ...sampleAnalysis,
+      financials: {
+        ...sampleAnalysis.financials,
+        expectedRent: 900,
+        hausgeld: 350,
+      },
+    };
+    render(
+      <ResultsDashboard
+        analysis={analysisWithRent}
+        metrics={shortLoanMetrics}
+        investmentSummary={sampleSummary}
+        priceComparison={samplePriceComparison}
+      />,
+    );
+    // The chart should show the "Mortgage ends in year 20" note
+    expect(screen.getByText(/Mortgage ends in year 20/)).toBeInTheDocument();
+    // Cash flow projection should be present
+    expect(screen.getByText(/Monthly Cash Flow Projection/)).toBeInTheDocument();
+  });
+
+  it("covers null rent/hausgeld fallbacks in cash flow calculation (lines 149-150)", () => {
+    const shortLoanMetrics = {
+      ...sampleMetrics,
+      monthlyCashFlow: 200,
+      assumptions: { mortgageRate: 0.035, downPayment: 0.2, loanTermYears: 20 },
+    };
+    // Set expectedRent AND currentRent to null to hit the ?? 0 fallback
+    // Set hausgeld to null to hit the ?? 0 fallback
+    const nullRentAnalysis = {
+      ...sampleAnalysis,
+      financials: {
+        ...sampleAnalysis.financials,
+        expectedRent: null,
+        currentRent: null,
+        hausgeld: null,
+      },
+    };
+    render(
+      <ResultsDashboard
+        analysis={nullRentAnalysis}
+        metrics={shortLoanMetrics}
+        investmentSummary={sampleSummary}
+        priceComparison={samplePriceComparison}
+      />,
+    );
+    expect(screen.getByText(/Monthly Cash Flow Projection/)).toBeInTheDocument();
+    expect(screen.getByText(/Mortgage ends in year 20/)).toBeInTheDocument();
+  });
 });
