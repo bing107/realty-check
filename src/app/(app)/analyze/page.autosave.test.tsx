@@ -163,6 +163,56 @@ describe("AnalyzePage (auto-save path)", () => {
     expect(options.method).toBe("POST");
   });
 
+  it("auto-save fetch rejection is silently swallowed (covers .catch callback)", async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ analysis: validAnalysis }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ metrics: validMetrics }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          investmentSummary: "Great property!",
+          priceComparison: null,
+        }),
+      })
+      .mockRejectedValueOnce(new Error("Network error on auto-save")); // auto-save rejects
+
+    render(<AnalyzePage />);
+
+    const file = new File(["content"], "auto.pdf", { type: "application/pdf" });
+    act(() => { capturedOnFilesChange2([file]); });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Analyze Documents" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Analyze with AI" })).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Analyze with AI" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Generate Full Report" })).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Generate Full Report" }));
+    });
+
+    // Dashboard still shows — the .catch(() => {}) silently swallows the fetch rejection
+    await waitFor(() => {
+      expect(screen.getByTestId("results-dashboard2")).toBeInTheDocument();
+    });
+  });
+
   it("shows UsageDisplay when AUTH_ENABLED=true and user is logged in", () => {
     render(<AnalyzePage />);
     expect(screen.getByTestId("usage-display")).toBeInTheDocument();

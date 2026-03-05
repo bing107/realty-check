@@ -146,6 +146,31 @@ describe("AccountPage", () => {
     // support mocking location.href assignment. The code path is exercised.
   });
 
+  it("handleManageSubscription: no redirect when portal response has no url (line 39 false branch)", async () => {
+    mockStripeEnabled = true;
+    mockFetch
+      .mockResolvedValueOnce({
+        json: () => Promise.resolve({ tier: "free", used: 0, limit: 1 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ url: null }), // data.url is falsy
+      });
+
+    render(<AccountPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Manage subscription")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Manage subscription"));
+
+    await waitFor(() => {
+      // No error shown — the if (data.url) false branch is taken silently
+      expect(mockFetch).toHaveBeenCalledWith("/api/stripe/portal", { method: "POST" });
+    });
+  });
+
   it("handleManageSubscription shows fallback error when data.error is falsy (line 36)", async () => {
     mockStripeEnabled = true;
     mockFetch

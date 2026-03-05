@@ -201,6 +201,35 @@ describe("AnalyzePage", () => {
     expect(screen.getByText("Failed to extract")).toBeInTheDocument();
   });
 
+  it("handleAnalyze: shows fetch error when outer try block throws unexpectedly (covers outer catch)", async () => {
+    const mockTrack = jest.requireMock("@/lib/analytics").track as jest.Mock;
+    // track is called 3 times before/during extraction:
+    // 1. files_uploaded (line 62, on file select)
+    // 2. extraction_started (line 85, before outer try)
+    // 3. extraction_completed (line 150, inside outer try) — this one throws
+    mockTrack
+      .mockImplementationOnce(() => undefined)  // files_uploaded
+      .mockImplementationOnce(() => undefined)  // extraction_started
+      .mockImplementationOnce(() => { throw new Error("track failure"); });  // extraction_completed
+
+    mockExtractTextFromPdf.mockResolvedValue({
+      filename: "test.pdf",
+      text: "content",
+      pages: 1,
+      isScanned: false,
+    });
+
+    render(<AnalyzePage />);
+    const file = new File(["content"], "test.pdf", { type: "application/pdf" });
+    act(() => { capturedOnFilesChange([file]); });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Analyze Documents" }));
+    });
+
+    expect(screen.getByText("Failed to extract documents. Please try again.")).toBeInTheDocument();
+  });
+
   it("handleAiAnalysis: calls /api/analyze and shows results", async () => {
     mockExtractTextFromPdf.mockResolvedValue({
       filename: "test.pdf",

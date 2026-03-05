@@ -74,6 +74,16 @@ describe('POST /api/analyze', () => {
     delete process.env.ANTHROPIC_API_KEY;
   });
 
+  it('returns 400 when request body is invalid JSON (covers req.json().catch callback)', async () => {
+    const req = new NextRequest('http://localhost/api/analyze', {
+      method: 'POST',
+      body: 'not valid json {{{',
+      headers: { 'content-type': 'application/json' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
   it('returns 400 when texts array is missing', async () => {
     const res = await POST(makeRequest({}));
     expect(res.status).toBe(400);
@@ -360,6 +370,17 @@ describe('POST /api/analyze', () => {
       const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
       expect(res.status).toBe(500);
       expect(serverTrack).not.toHaveBeenCalled();
+    });
+
+    it('succeeds even when serverTrack rejects (covers .catch callback)', async () => {
+      serverTrack.mockRejectedValueOnce(new Error('PostHog down'));
+      const mockCreate = jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: JSON.stringify(validAnalysis) }],
+      });
+      MockAnthropic.mockImplementation(() => ({ messages: { create: mockCreate } }));
+
+      const res = await POST(makeRequest({ texts: [{ filename: 'doc.pdf', text: 'text' }] }));
+      expect(res.status).toBe(200);
     });
   });
 });

@@ -720,5 +720,46 @@ describe('POST /api/stripe/webhook', () => {
 
       expect(mockServerTrack).not.toHaveBeenCalled();
     });
+
+    it('succeeds even when serverTrack rejects on checkout.session.completed (covers .catch callback)', async () => {
+      mockServerTrack.mockRejectedValueOnce(new Error('PostHog down'));
+      const mockEvent = {
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            mode: 'subscription',
+            customer: 'cus_123',
+            subscription: 'sub_456',
+            customer_email: 'user@example.com',
+            amount_total: 2900,
+          },
+        },
+      };
+      mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
+      mockStripeObj.subscriptions.retrieve.mockResolvedValue({
+        items: { data: [{ current_period_end: 1735689600 }] },
+      });
+      mockPrisma.user.findUnique.mockResolvedValueOnce({ id: 'user-1', stripeCustomerId: 'cus_123' });
+      mockPrisma.user.update.mockResolvedValue({});
+
+      const res = await POST(makeWebhookRequest(JSON.stringify(mockEvent)));
+      expect(res.status).toBe(200);
+    });
+
+    it('succeeds even when serverTrack rejects on customer.subscription.deleted (covers .catch callback)', async () => {
+      mockServerTrack.mockRejectedValueOnce(new Error('PostHog down'));
+      const mockEvent = {
+        type: 'customer.subscription.deleted',
+        data: {
+          object: { id: 'sub_del_catch', customer: 'cus_del_catch' },
+        },
+      };
+      mockStripeObj.webhooks.constructEvent.mockReturnValue(mockEvent);
+      mockPrisma.user.findUnique.mockResolvedValueOnce({ id: 'user-del-catch' });
+      mockPrisma.user.update.mockResolvedValue({});
+
+      const res = await POST(makeWebhookRequest(JSON.stringify(mockEvent)));
+      expect(res.status).toBe(200);
+    });
   });
 });

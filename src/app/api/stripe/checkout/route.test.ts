@@ -285,5 +285,22 @@ describe('POST /api/stripe/checkout', () => {
 
       expect(mockServerTrack).not.toHaveBeenCalled();
     });
+
+    it('succeeds even when serverTrack rejects (covers .catch callback)', async () => {
+      mockServerTrack.mockRejectedValueOnce(new Error('PostHog down'));
+      mockAuth.mockResolvedValue({
+        user: { id: 'user-1', email: 'test@example.com' },
+      });
+      mockPrisma.user.findUniqueOrThrow.mockResolvedValue({
+        stripeCustomerId: 'cus_existing_456',
+        email: 'test@example.com',
+      });
+      mockStripeObj.checkout.sessions.create.mockResolvedValue({
+        url: 'https://checkout.stripe.com/session_789',
+      });
+
+      const res = await POST();
+      expect(res.status).toBe(200);
+    });
   });
 });

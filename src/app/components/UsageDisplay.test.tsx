@@ -176,6 +176,33 @@ describe("UsageDisplay", () => {
     // support mocking location.href assignment. The code path is exercised.
   });
 
+  it("handleManageSubscription: no redirect when portal response has no url (line 64 false branch)", async () => {
+    mockAuthEnabled = true;
+    mockStripeEnabled = true;
+    mockUseSession.mockReturnValue({ data: { user: { id: "1" } } });
+
+    mockFetch
+      .mockResolvedValueOnce({
+        json: () => Promise.resolve({ tier: "pro", used: 5, limit: 30, periodStart: "2026-03-01" }),
+      })
+      .mockResolvedValueOnce({
+        json: () => Promise.resolve({ url: null }), // data.url is falsy
+      });
+
+    render(<UsageDisplay apiKey="" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Manage subscription")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Manage subscription"));
+
+    await waitFor(() => {
+      // No redirect — if (data.url) false branch is taken silently
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("handles fetch error gracefully", async () => {
     mockAuthEnabled = true;
     mockUseSession.mockReturnValue({ data: { user: { id: "1" } } });
